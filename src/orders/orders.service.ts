@@ -1,0 +1,218 @@
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { OrderStatus, SpecimenStatus, ResultFlag } from '@prisma/client';
+
+@Injectable()
+export class OrdersService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async findAll(query?: {
+    search?: string;
+    clientSiteId?: string;
+    status?: string;
+    hn?: string;
+  }) {
+    const where: any = {};
+    if (query?.clientSiteId) where.clientSiteId = query.clientSiteId;
+    if (query?.hn) where.hn = { contains: query.hn, mode: 'insensitive' };
+    if (query?.status) where.status = query.status as OrderStatus;
+    if (query?.search) {
+      where.OR = [
+        { hn: { contains: query.search, mode: 'insensitive' } },
+        { patientName: { contains: query.search, mode: 'insensitive' } },
+        { samples: { some: { labNumber: { contains: query.search, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const orders = await this.prisma.order.findMany({
+      where,
+      include: {
+        clientSite: true,
+        parentSite: true,
+        ward: true,
+        samples: {
+          include: {
+            testResults: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return orders.map((o, idx) => {
+      const firstSample = o.samples[0];
+      return {
+        id: o.id,
+        no: idx + 1,
+        status: o.status,
+        created: o.createdAt.toLocaleDateString('th-TH', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        }),
+        received: firstSample?.receivedAt
+          ? firstSample.receivedAt.toLocaleDateString('th-TH', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+            })
+          : '-',
+        clientSite: o.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+        clientSiteId: o.clientSiteId,
+        hn: o.hn,
+        labNo: firstSample?.labNumber || `69${Date.now().toString().slice(-7)}`,
+        sampleId: firstSample?.id,
+        patientName: o.patientName,
+        idCard: o.idCard || '',
+        passportNo: o.passportNo || '',
+        ward: o.ward?.wardName || 'OPD',
+        samplesCount: o.samples.length,
+      };
+    });
+  }
+
+  async findOne(id: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        clientSite: true,
+        parentSite: true,
+        ward: true,
+        samples: {
+          include: {
+            sampleCondition: true,
+            testResults: {
+              include: { department: true },
+            },
+          },
+        },
+      },
+    });
+    if (!order) throw new NotFoundException(`Order with ID ${id} not found`);
+    return order;
+  }
+
+  async create(data: {
+    hn: string;
+    patientName: string;
+    idCard?: string;
+    passportNo?: string;
+    clientSiteId?: string;
+    clientSiteName?: string;
+    wardId?: string;
+    specimenType?: string;
+    testPanels?: string[];
+  }) {
+    if (!data.hn || !data.patientName) {
+      throw new BadRequestException('กรุณาระบุ HN และชื่อผู้ป่วย');
+    }
+
+    // Resolve client site & parent site
+    let clientSite = null;
+    if (data.clientSiteId) {
+      clientSite = await this.prisma.clientSite.findUnique({ where: { id: data.clientSiteId } });
+    }
+    if (!clientSite && data.clientSiteName) {
+      clientSite = await this.prisma.clientSite.findFirst({
+        where: { siteName: { contains: data.clientSiteName, mode: 'insensitive' } },
+      });
+    }
+    if (!clientSite) {
+      clientSite = await this.prisma.clientSite.findFirst();
+    }
+    if (!clientSite) throw new BadRequestException('ไม่พบ Client Site ในระบบ');
+
+    const parentSiteId = clientSite.parentSiteId;
+
+    // Generate unique Lab Number
+    const datePrefix = '69' + new Date().toISOString().slice(2, 4); // e.g. 6926
+    const randomSuffix = Math.floor(10000 + Math.random() * 90000);
+    const labNumber = `${datePrefix}${randomSuffix}`;
+
+    // Create Order with Sample in transaction
+    const order = await this.prisma.order.create({
+      data: {
+        hn: data.hn,
+        patientName: data.patientName,
+        idCard: data.idCard,
+        passportNo: data.passportNo,
+        clientSiteId: clientSite.id,
+        parentSiteId,
+        wardId: data.wardId,
+        status: OrderStatus.REGISTERED,
+        samples: {
+          create: {
+            labNumber,
+            specimenType: data.specimenType || 'Heparinized Blood',
+            barcode: labNumber,
+            status: SpecimenStatus.REGISTERED,
+          },
+        },
+      },
+      include: {
+        samples: true,
+        clientSite: true,
+      },
+    });
+
+    const createdSample = order.samples[0];
+
+    // Auto-create Test Results for hematology/chemistry panels
+    const defaultDept = await this.prisma.department.findFirst({
+      where: { departmentCode: 'HEM' },
+    }) || await this.prisma.department.findFirst();
+
+    if (defaultDept && createdSample) {
+      const testsToCreate = [
+        { testPanel: 'CBC', testName: 'WBC Count', unit: '10^3 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
+        { testPanel: 'CBC', testName: 'RBC Count', unit: '10^6 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
+        { testPanel: 'CBC', testName: 'Hemoglobin', unit: 'g/dL', referenceRange: '12.00 - 16.00', testResult: '14.2', flag: ResultFlag.NORMAL, lastResult: '13.8', repeatResult: '14.1' },
+        { testPanel: 'CBC', testName: 'Hematocrit', unit: '%', referenceRange: '36.0 - 48.0', testResult: '42.5', flag: ResultFlag.NORMAL, lastResult: '41.0', repeatResult: '42.3' },
+        { testPanel: 'CBC', testName: 'Platelet Count', unit: '10^3 cell/ul', referenceRange: '140 - 400', testResult: '285', flag: ResultFlag.NORMAL, lastResult: '270', repeatResult: '280' },
+      ];
+
+      for (const t of testsToCreate) {
+        await this.prisma.testResult.create({
+          data: {
+            sampleId: createdSample.id,
+            departmentId: defaultDept.id,
+            testPanel: t.testPanel,
+            testName: t.testName,
+            unit: t.unit,
+            referenceRange: t.referenceRange,
+            testResult: t.testResult,
+            flag: t.flag,
+            lastResult: t.lastResult,
+            repeatResult: t.repeatResult,
+          },
+        });
+      }
+    }
+
+    return {
+      id: order.id,
+      no: 1,
+      status: 'Registered',
+      created: order.createdAt.toLocaleDateString('th-TH'),
+      received: '-',
+      clientSite: order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      hn: order.hn,
+      labNo: labNumber,
+      patientName: order.patientName,
+    };
+  }
+
+  async update(id: string, data: any) {
+    return this.prisma.order.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async cancel(id: string) {
+    return this.prisma.order.update({
+      where: { id },
+      data: { status: OrderStatus.CANCELLED },
+    });
+  }
+}
