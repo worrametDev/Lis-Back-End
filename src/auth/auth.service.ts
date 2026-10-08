@@ -29,10 +29,7 @@ export class AuthService {
 
     const isMatch = await bcrypt.compare(pass, user.passwordHash);
     if (!isMatch) {
-      // Check fallback for development initial testing if password is plain text
-      if (pass !== 'Admin@1234' && pass !== user.passwordHash) {
-        throw new UnauthorizedException('ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง');
-      }
+      throw new UnauthorizedException('ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง');
     }
 
     const { passwordHash, ...result } = user;

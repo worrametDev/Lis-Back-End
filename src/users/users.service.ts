@@ -68,6 +68,38 @@ export class UsersService {
     }));
   }
 
+  async getOptions() {
+    const parentSites = await this.prisma.parentSite.findMany({
+      where: { siteStatus: 'Active' },
+      select: { id: true, siteCode: true, siteName: true, siteType: true },
+      orderBy: { siteName: 'asc' },
+    });
+    const clientSites = await this.prisma.clientSite.findMany({
+      where: { siteStatus: 'Active' },
+      select: { id: true, siteCode: true, siteName: true, siteType: true, parentSiteId: true },
+      orderBy: { siteName: 'asc' },
+    });
+
+    const roles = [
+      { id: 'System Administrator', name: 'System Administrator' },
+      { id: 'Lab Administrator', name: 'Lab Administrator' },
+      { id: 'Medical Technologist', name: 'Medical Technologist' },
+      { id: 'Client Site User', name: 'Client Site User' },
+    ];
+
+    const statuses = [
+      { id: 'Active', name: 'Active' },
+      { id: 'Inactive', name: 'Inactive' },
+    ];
+
+    return {
+      parentSites,
+      clientSites,
+      roles,
+      statuses,
+    };
+  }
+
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
@@ -174,10 +206,47 @@ export class UsersService {
     if (updateData.userStatus) {
       updateData.userStatus = this.mapStatus(updateData.userStatus);
     }
-    return this.prisma.user.update({
+    if (updateData.siteName) {
+      const foundClient = await this.prisma.clientSite.findFirst({
+        where: { siteName: { contains: updateData.siteName, mode: 'insensitive' } },
+      });
+      if (foundClient) {
+        updateData.clientSiteId = foundClient.id;
+        updateData.parentSiteId = foundClient.parentSiteId;
+      } else {
+        const foundParent = await this.prisma.parentSite.findFirst({
+          where: { siteName: { contains: updateData.siteName, mode: 'insensitive' } },
+        });
+        if (foundParent) {
+          updateData.parentSiteId = foundParent.id;
+          updateData.clientSiteId = null;
+        }
+      }
+      delete updateData.siteName;
+    }
+
+    const updated = await this.prisma.user.update({
       where: { id },
       data: updateData,
+      include: { parentSite: true, clientSite: true },
     });
+
+    return {
+      id: updated.id,
+      status: updated.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
+      username: updated.username,
+      fullname: `${updated.firstName} ${updated.lastName}`.trim(),
+      firstName: updated.firstName,
+      lastName: updated.lastName,
+      email: updated.email || '',
+      telNo: updated.telNo || '',
+      position: updated.position || '',
+      organization: updated.organization || '',
+      userRole: updated.userRole.replace(/_/g, ' '),
+      clientSite: updated.clientSite?.siteName || updated.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSite: updated.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      createdAt: updated.createdAt,
+    };
   }
 
   async remove(id: string) {

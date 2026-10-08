@@ -22,6 +22,13 @@ export class UsersController {
     return this.usersService.findAll(search, role, status);
   }
 
+  @Get('options')
+  @ApiOperation({ summary: 'ดึงตัวเลือกสำหรับฟอร์ม Account (Roles, Statuses, Sites จาก Database)' })
+  @ApiResponse({ status: 200, description: 'คืนค่ารายการตัวเลือกสำหรับ Dropdowns' })
+  async getOptions() {
+    return this.usersService.getOptions();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'ดึงข้อมูลผู้ใช้งานรายบุคคลตาม ID' })
   @ApiParam({ name: 'id', description: 'User ID' })
