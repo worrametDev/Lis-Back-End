@@ -1,0 +1,300 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// 1. MASTER SITES & ORGANIZATIONS
+// ----------------------------------------------------
+
+model ParentSite {
+  id          String       @id @default(uuid())
+  siteCode    String       @unique // e.g. "00940"
+  siteName    String       // e.g. "โรงพยาบาลเสนา"
+  siteType    String?      @default("Parent Site")
+  siteStatus  String?      @default("Active")
+  lnPattern   String?
+  address     String?
+  subdistrict String?
+  district    String?
+  province    String?
+  zipcode     String?
+  hospitalFile String?
+  isoFile     String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  clientSites ClientSite[]
+  users       User[]
+  orders      Order[]
+  wards       Ward[]
+}
+
+model ClientSite {
+  id             String       @id @default(uuid())
+  siteCode       String       @unique // e.g. "00940-01"
+  siteName       String       // e.g. "โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง"
+  siteType       String?      @default("Client Site")
+  siteStatus     String?      @default("Active")
+  lnPattern      String?
+  parentSiteId   String
+  parentSite     ParentSite   @relation(fields: [parentSiteId], references: [id])
+  address        String?
+  subdistrict    String?
+  district       String?
+  province       String?
+  zipcode        String?
+  hospitalFile   String?
+  isoFile        String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  users          User[]
+  orders         Order[]
+  shipments      Shipment[]
+}
+
+model Ward {
+  id           String       @id @default(uuid())
+  wardCode     String       // e.g. "OPD", "IPD1"
+  wardName     String       // e.g. "ผู้ป่วยนอก (OPD)"
+  wardStatus   String?      @default("Active")
+  parentSiteId String
+  parentSite   ParentSite   @relation(fields: [parentSiteId], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  orders       Order[]
+}
+
+model Department {
+  id             String       @id @default(uuid())
+  departmentCode String       @unique // e.g. "HEM", "CHM", "IMM"
+  departmentName String       // e.g. "DEPT: HEMATOLOGY", "DEPT: CHEMISTRY"
+  deptStatus     String?      @default("Active")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  testResults    TestResult[]
+}
+
+model SampleCondition {
+  id            String       @id @default(uuid())
+  conditionCode String       @unique // e.g. "HEMOLYSIS", "CLOT", "VOL_INSUF"
+  conditionName String       // e.g. "เม็ดเลือดแดงแตก (Hemolysis)"
+  sampleStatus  String?      @default("Active")
+  isDefault     Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  samples       Sample[]
+}
+
+// ----------------------------------------------------
+// 2. USER & ACCESS CONTROL
+// ----------------------------------------------------
+
+enum UserRole {
+  SYSTEM_ADMINISTRATOR
+  LAB_ADMINISTRATOR
+  MEDICAL_TECHNOLOGIST
+  CLIENT_SITE_USER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model User {
+  id           String       @id @default(uuid())
+  username     String       @unique
+  passwordHash String
+  email        String?
+  firstName    String
+  lastName     String
+  telNo        String?
+  position     String?
+  organization String?
+  userRole     UserRole     @default(SYSTEM_ADMINISTRATOR)
+  userStatus   UserStatus   @default(ACTIVE)
+  licenseNo    String?      // e.g. "19935" (เลขที่ใบอนุญาต ว.ท.)
+  signatureUrl String?      // Path / URL ของรูปลายเซ็นสำหรับแนบในรายงาน
+  province     String?      // จังหวัด
+  healthRegion String?      // เขตสุขภาพ เช่น "เขต 4"
+  
+  parentSiteId String?
+  parentSite   ParentSite?  @relation(fields: [parentSiteId], references: [id])
+  clientSiteId String?
+  clientSite   ClientSite?  @relation(fields: [clientSiteId], references: [id])
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  receivedSamples Sample[]  @relation("ReceivedBy")
+  rejectedSamples Sample[]  @relation("RejectedBy")
+  approvedResults TestResult[] @relation("ApprovedBy")
+  auditLogs       AuditLog[]
+}
+
+// ----------------------------------------------------
+// 3. SHIPMENT & LOGISTICS
+// ----------------------------------------------------
+
+enum ShipmentStatus {
+  PREPARING
+  IN_TRANSIT
+  RECEIVED
+}
+
+model Shipment {
+  id             String         @id @default(uuid())
+  shipmentNumber String         @unique // e.g. "SHP-202610-001"
+  clientSiteId   String
+  clientSite     ClientSite     @relation(fields: [clientSiteId], references: [id])
+  status         ShipmentStatus @default(PREPARING)
+  shipmentDate   DateTime?
+  receivedDate   DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  orders         Order[]
+}
+
+// ----------------------------------------------------
+// 4. ORDERS & SPECIMENS (SAMPLES)
+// ----------------------------------------------------
+
+enum OrderStatus {
+  REGISTERED
+  SHIPPED
+  RECEIVED
+  IN_PROCESS
+  COMPLETED
+  CANCELLED
+}
+
+model Order {
+  id             String       @id @default(uuid())
+  hn             String       // Hospital Number e.g. "68/01254"
+  idCard         String?      // เลขบัตรประชาชน
+  passportNo     String?      // หมายเลขหนังสือเดินทาง
+  patientName    String       // ชื่อ-สกุลผู้ป่วย e.g. "นายธิติธาดา พัฒลักษณ์"
+  
+  parentSiteId   String
+  parentSite     ParentSite   @relation(fields: [parentSiteId], references: [id])
+  clientSiteId   String
+  clientSite     ClientSite   @relation(fields: [clientSiteId], references: [id])
+  wardId         String?
+  ward           Ward?        @relation(fields: [wardId], references: [id])
+  shipmentId     String?
+  shipment       Shipment?    @relation(fields: [shipmentId], references: [id])
+
+  status         OrderStatus  @default(REGISTERED)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  samples        Sample[]
+}
+
+enum SpecimenStatus {
+  REGISTERED
+  RECEIVED
+  REJECTED
+  IN_PROCESS
+  VERIFIED
+  APPROVED
+}
+
+model Sample {
+  id                String           @id @default(uuid())
+  orderId           String
+  order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  labNumber         String           @unique // e.g. "691006002"
+  specimenType      String           // e.g. "Heparinized Blood", "EDTA", "Serum"
+  barcode           String?
+  status            SpecimenStatus   @default(REGISTERED)
+
+  // ข้อมูลการตรวจรับ / ปฏิเสธ (Sample Receiving)
+  sampleConditionId String?
+  sampleCondition   SampleCondition? @relation(fields: [sampleConditionId], references: [id])
+  conditionOther    String?
+  receivedAt        DateTime?
+  receivedById      String?
+  receivedBy        User?            @relation("ReceivedBy", fields: [receivedById], references: [id])
+  
+  rejectedAt        DateTime?
+  rejectedById      String?
+  rejectedBy        User?            @relation("RejectedBy", fields: [rejectedById], references: [id])
+  rejectionReason   String?
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  testResults       TestResult[]
+}
+
+// ----------------------------------------------------
+// 5. TEST RESULTS & WORKSTATION
+// ----------------------------------------------------
+
+enum ResultFlag {
+  NORMAL   // N
+  HIGH     // H
+  LOW      // L
+  ABNORMAL // A
+}
+
+model TestResult {
+  id             String       @id @default(uuid())
+  sampleId       String
+  sample         Sample       @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  departmentId   String
+  department     Department   @relation(fields: [departmentId], references: [id])
+
+  testPanel      String       // e.g. "CBC", "Electrolyte"
+  testName       String       // e.g. "WBC Count"
+  testResult     String?      // e.g. "4.52"
+  flag           ResultFlag?  @default(NORMAL)
+  lastResult     String?      // e.g. "4.16" (ดึงจากประวัติเดิมอัตโนมัติ)
+  unit           String?      // e.g. "10^3 cell/ul"
+  referenceRange String?      // e.g. "4.00 - 10.00"
+  repeatResult   String?      // e.g. "4.48"
+
+  // ตรวจสอบและอนุมัติ (Verify & Approve)
+  isApproved     Boolean      @default(false)
+  approvedAt     DateTime?
+  approvedById   String?
+  approvedBy     User?        @relation("ApprovedBy", fields: [approvedById], references: [id])
+
+  // Soft Delete / Void ตามมาตรฐาน ISO 15189
+  isVoided       Boolean      @default(false)
+  voidReason     String?
+  voidedAt       DateTime?
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+// ----------------------------------------------------
+// 6. AUDIT TRAIL LOGGING
+// ----------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String   // e.g. "LOGIN", "RECEIVE_SAMPLE", "REJECT_SAMPLE", "APPROVE_RESULT", "VOID_RESULT"
+  entityType String   // e.g. "Order", "Sample", "TestResult"
+  entityId   String
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+}
