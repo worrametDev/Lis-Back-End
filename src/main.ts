@@ -3,6 +3,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import * as path from 'path';
+import * as fs from 'fs';
 
 import * as cookieParser from 'cookie-parser';
 
@@ -11,18 +12,34 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
+  const rawOrigins = process.env.CORS_ORIGIN || '';
+  const allowedOrigins = rawOrigins
+    ? rawOrigins.split(',').map((o) => o.trim())
+    : [];
+
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-    ],
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1') ||
+        origin.endsWith('.vercel.app')
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
 
-  app.useStaticAssets(path.join(process.cwd(), 'uploads'), {
-    prefix: '/uploads/',
-  });
+  const uploadDir = path.join(process.cwd(), 'uploads');
+  if (fs.existsSync(uploadDir)) {
+    app.useStaticAssets(uploadDir, {
+      prefix: '/uploads/',
+    });
+  }
 
   app.setGlobalPrefix('api/v1');
 

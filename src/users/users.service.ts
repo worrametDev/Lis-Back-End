@@ -1,11 +1,16 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   private mapRole(roleString?: string): UserRole {
     if (!roleString) return UserRole.SYSTEM_ADMINISTRATOR;
@@ -69,6 +74,9 @@ export class UsersService {
   }
 
   async getOptions() {
+    const cached = await this.cacheManager.get<any>('user_options');
+    if (cached) return cached;
+
     const parentSites = await this.prisma.parentSite.findMany({
       where: { siteStatus: 'Active' },
       select: { id: true, siteCode: true, siteName: true, siteType: true },
@@ -92,12 +100,15 @@ export class UsersService {
       { id: 'Inactive', name: 'Inactive' },
     ];
 
-    return {
+    const result = {
       parentSites,
       clientSites,
       roles,
       statuses,
     };
+
+    await this.cacheManager.set('user_options', result, 600000); // 10 minutes
+    return result;
   }
 
   async findOne(id: string) {

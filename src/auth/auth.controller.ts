@@ -70,11 +70,14 @@ export class AuthController {
 
     const result = await this.authService.login(username, password);
 
-    // Set HttpOnly, SameSite=Lax Cookie (ป้องกัน XSS 100% ตามมาตรฐาน OWASP)
+    const isProd = process.env.NODE_ENV === 'production';
+    const sameSiteMode = isProd ? ('none' as const) : ('lax' as const);
+
+    // Set HttpOnly Cookie (รองรับทั้ง Cross-Domain Vercel และ Localhost)
     res.cookie('healthdi_token', result.accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: sameSiteMode,
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
@@ -86,10 +89,13 @@ export class AuthController {
   @ApiOperation({ summary: 'ออกจากระบบ (Logout) และทำลาย HttpOnly Cookie' })
   @ApiResponse({ status: 200, description: 'ออกจากระบบสำเร็จ' })
   async logout(@Res({ passthrough: true }) res: Response) {
+    const isProd = process.env.NODE_ENV === 'production';
+    const sameSiteMode = isProd ? ('none' as const) : ('lax' as const);
+
     res.clearCookie('healthdi_token', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: sameSiteMode,
       path: '/',
     });
     return { success: true, message: 'ออกจากระบบเรียบร้อยแล้ว' };

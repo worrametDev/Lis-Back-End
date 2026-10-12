@@ -88,4 +88,43 @@ export class WorkstationController {
   voidResult(@Body() body: { id: string; reason: string }) {
     return this.workstationService.voidResult(body.id, body.reason);
   }
+
+  @Post('delete-results')
+  @ApiOperation({ summary: 'ลบผลตรวจแล็บ (ISO 15189 Soft Delete / Void พร้อม Audit Trail)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        resultIds: { type: 'array', items: { type: 'string' }, description: 'Array of result UUIDs' },
+        reason: { type: 'string', example: 'ยกเลิกคำสั่งตรวจซ้ำซ้อน' },
+        userAccount: { type: 'string', example: 'thititada.p' },
+        sampleId: { type: 'string' },
+      },
+      required: ['resultIds', 'reason'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'ลบผลตรวจสำเร็จ' })
+  deleteResults(@Body() body: { resultIds: string[]; reason: string; userAccount?: string; sampleId?: string }) {
+    return this.workstationService.deleteResults(body);
+  }
+
+  @Post('re-status')
+  @ApiOperation({ summary: 'ปรับสถานะผลแล็บ / สิ่งส่งตรวจ (Re-status พร้อม Audit Trail)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        resultIds: { type: 'array', items: { type: 'string' }, description: 'Array of result UUIDs' },
+        reason: { type: 'string', example: 'ส่งตรวจซ้ำเพื่อยืนยันค่าผิดปกติ' },
+        targetStatus: { type: 'string', example: 'IN_PROCESS' },
+        userAccount: { type: 'string', example: 'thititada.p' },
+        sampleId: { type: 'string' },
+      },
+      required: ['reason'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'ปรับสถานะสำเร็จ' })
+  reStatus(@Body() body: { resultIds: string[]; reason: string; targetStatus?: string; userAccount?: string; sampleId?: string }) {
+    return this.workstationService.reStatus(body);
+  }
 }

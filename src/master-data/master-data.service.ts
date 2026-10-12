@@ -1,18 +1,29 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class MasterDataService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   // ==========================================
   // 1. PARENT SITES
   // ==========================================
   async findAllParentSites() {
-    return this.prisma.parentSite.findMany({
+    const cached = await this.cacheManager.get<any[]>('master_parent_sites');
+    if (cached) return cached;
+
+    const sites = await this.prisma.parentSite.findMany({
       orderBy: { createdAt: 'desc' },
       include: { clientSites: true },
     });
+
+    await this.cacheManager.set('master_parent_sites', sites, 600000); // 10 minutes
+    return sites;
   }
 
   async createParentSite(data: {
@@ -39,7 +50,7 @@ export class MasterDataService {
       throw new BadRequestException(`Parent Site Code "${data.siteCode}" มีอยู่แล้วในระบบ`);
     }
 
-    return this.prisma.parentSite.create({
+    const created = await this.prisma.parentSite.create({
       data: {
         siteCode: data.siteCode,
         siteName: data.siteName,
@@ -55,23 +66,37 @@ export class MasterDataService {
         isoFile: data.isoFile,
       },
     });
+
+    await this.cacheManager.del('master_parent_sites');
+    await this.cacheManager.del('user_options');
+    return created;
   }
 
   async updateParentSite(id: string, data: any) {
-    return this.prisma.parentSite.update({
+    const updated = await this.prisma.parentSite.update({
       where: { id },
       data,
     });
+    await this.cacheManager.del('master_parent_sites');
+    await this.cacheManager.del('user_options');
+    return updated;
   }
 
   async deleteParentSite(id: string) {
-    return this.prisma.parentSite.delete({ where: { id } });
+    const deleted = await this.prisma.parentSite.delete({ where: { id } });
+    await this.cacheManager.del('master_parent_sites');
+    await this.cacheManager.del('user_options');
+    return deleted;
   }
 
   // ==========================================
   // 2. CLIENT SITES
   // ==========================================
   async findAllClientSites(parentSiteId?: string) {
+    const cacheKey = `master_client_sites_${parentSiteId || 'all'}`;
+    const cached = await this.cacheManager.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     const where: any = {};
     if (parentSiteId) where.parentSiteId = parentSiteId;
 
@@ -81,7 +106,7 @@ export class MasterDataService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return sites.map((s) => ({
+    const mapped = sites.map((s) => ({
       id: s.id,
       siteCode: s.siteCode,
       siteName: s.siteName,
@@ -99,6 +124,9 @@ export class MasterDataService {
       isoFile: s.isoFile,
       createdAt: s.createdAt,
     }));
+
+    await this.cacheManager.set(cacheKey, mapped, 600000);
+    return mapped;
   }
 
   async createClientSite(data: {
@@ -136,7 +164,7 @@ export class MasterDataService {
       parentSiteId = parent.id;
     }
 
-    return this.prisma.clientSite.create({
+    const created = await this.prisma.clientSite.create({
       data: {
         siteCode: data.siteCode,
         siteName: data.siteName,
@@ -154,28 +182,41 @@ export class MasterDataService {
       },
       include: { parentSite: true },
     });
+
+    await this.cacheManager.del('master_client_sites_all');
+    await this.cacheManager.del('user_options');
+    return created;
   }
 
   async updateClientSite(id: string, data: any) {
-    return this.prisma.clientSite.update({
+    const updated = await this.prisma.clientSite.update({
       where: { id },
       data,
     });
+    await this.cacheManager.del('master_client_sites_all');
+    await this.cacheManager.del('user_options');
+    return updated;
   }
 
   async deleteClientSite(id: string) {
-    return this.prisma.clientSite.delete({ where: { id } });
+    const deleted = await this.prisma.clientSite.delete({ where: { id } });
+    await this.cacheManager.del('master_client_sites_all');
+    await this.cacheManager.del('user_options');
+    return deleted;
   }
 
   // ==========================================
   // 3. WARDS
   // ==========================================
   async findAllWards() {
+    const cached = await this.cacheManager.get<any[]>('master_wards');
+    if (cached) return cached;
+
     const wards = await this.prisma.ward.findMany({
       include: { parentSite: true },
       orderBy: { createdAt: 'desc' },
     });
-    return wards.map((w) => ({
+    const mapped = wards.map((w) => ({
       id: w.id,
       wardCode: w.wardCode,
       wardName: w.wardName,
@@ -183,6 +224,9 @@ export class MasterDataService {
       wardStatus: w.wardStatus || 'Active',
       parentSiteId: w.parentSiteId,
     }));
+
+    await this.cacheManager.set('master_wards', mapped, 600000);
+    return mapped;
   }
 
   async createWard(data: {
@@ -203,7 +247,7 @@ export class MasterDataService {
       parentSiteId = parent.id;
     }
 
-    return this.prisma.ward.create({
+    const created = await this.prisma.ward.create({
       data: {
         wardCode: data.wardCode,
         wardName: data.wardName,
@@ -212,23 +256,36 @@ export class MasterDataService {
       },
       include: { parentSite: true },
     });
+
+    await this.cacheManager.del('master_wards');
+    return created;
   }
 
   async updateWard(id: string, data: any) {
-    return this.prisma.ward.update({ where: { id }, data });
+    const updated = await this.prisma.ward.update({ where: { id }, data });
+    await this.cacheManager.del('master_wards');
+    return updated;
   }
 
   async deleteWard(id: string) {
-    return this.prisma.ward.delete({ where: { id } });
+    const deleted = await this.prisma.ward.delete({ where: { id } });
+    await this.cacheManager.del('master_wards');
+    return deleted;
   }
 
   // ==========================================
   // 4. DEPARTMENTS
   // ==========================================
   async findAllDepartments() {
-    return this.prisma.department.findMany({
+    const cached = await this.cacheManager.get<any[]>('master_departments');
+    if (cached) return cached;
+
+    const depts = await this.prisma.department.findMany({
       orderBy: { departmentCode: 'asc' },
     });
+
+    await this.cacheManager.set('master_departments', depts, 600000);
+    return depts;
   }
 
   async createDepartment(data: {
@@ -246,30 +303,43 @@ export class MasterDataService {
       throw new BadRequestException(`Department Code "${data.departmentCode}" มีอยู่แล้ว`);
     }
 
-    return this.prisma.department.create({
+    const created = await this.prisma.department.create({
       data: {
         departmentCode: data.departmentCode,
         departmentName: data.departmentName,
         deptStatus: data.deptStatus || 'Active',
       },
     });
+
+    await this.cacheManager.del('master_departments');
+    return created;
   }
 
   async updateDepartment(id: string, data: any) {
-    return this.prisma.department.update({ where: { id }, data });
+    const updated = await this.prisma.department.update({ where: { id }, data });
+    await this.cacheManager.del('master_departments');
+    return updated;
   }
 
   async deleteDepartment(id: string) {
-    return this.prisma.department.delete({ where: { id } });
+    const deleted = await this.prisma.department.delete({ where: { id } });
+    await this.cacheManager.del('master_departments');
+    return deleted;
   }
 
   // ==========================================
   // 5. SAMPLE CONDITIONS
   // ==========================================
   async findAllSampleConditions() {
-    return this.prisma.sampleCondition.findMany({
+    const cached = await this.cacheManager.get<any[]>('master_sample_conditions');
+    if (cached) return cached;
+
+    const conditions = await this.prisma.sampleCondition.findMany({
       orderBy: { createdAt: 'asc' },
     });
+
+    await this.cacheManager.set('master_sample_conditions', conditions, 600000);
+    return conditions;
   }
 
   async createSampleCondition(data: {
@@ -288,7 +358,7 @@ export class MasterDataService {
       throw new BadRequestException(`Condition Code "${data.conditionCode}" มีอยู่แล้ว`);
     }
 
-    return this.prisma.sampleCondition.create({
+    const created = await this.prisma.sampleCondition.create({
       data: {
         conditionCode: data.conditionCode,
         conditionName: data.conditionName,
@@ -296,13 +366,51 @@ export class MasterDataService {
         isDefault: Boolean(data.isDefault),
       },
     });
+
+    await this.cacheManager.del('master_sample_conditions');
+    return created;
   }
 
   async updateSampleCondition(id: string, data: any) {
-    return this.prisma.sampleCondition.update({ where: { id }, data });
+    const updated = await this.prisma.sampleCondition.update({ where: { id }, data });
+    await this.cacheManager.del('master_sample_conditions');
+    return updated;
   }
 
   async deleteSampleCondition(id: string) {
-    return this.prisma.sampleCondition.delete({ where: { id } });
+    const deleted = await this.prisma.sampleCondition.delete({ where: { id } });
+    await this.cacheManager.del('master_sample_conditions');
+    return deleted;
+  }
+
+  // ==========================================
+  // 6. CACHE DIAGNOSTICS & STATS
+  // ==========================================
+  async getCacheStats() {
+    const keys = [
+      'master_parent_sites',
+      'master_client_sites_all',
+      'master_wards',
+      'master_departments',
+      'master_sample_conditions',
+      'user_options',
+    ];
+
+    const entries: Record<string, any> = {};
+    for (const key of keys) {
+      const data: any = await this.cacheManager.get(key);
+      const isCached = data !== undefined && data !== null;
+      entries[key] = {
+        isCached,
+        itemCount: Array.isArray(data) ? data.length : isCached ? 1 : 0,
+        sample: Array.isArray(data) ? data.slice(0, 1) : data,
+      };
+    }
+
+    return {
+      status: 'active',
+      cachedKeysCount: Object.values(entries).filter((e) => e.isCached).length,
+      keys: entries,
+    };
   }
 }

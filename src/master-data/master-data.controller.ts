@@ -8,6 +8,12 @@ import { MasterDataService } from './master-data.service';
 export class MasterDataController {
   constructor(private readonly masterDataService: MasterDataService) {}
 
+  @Get('master-data/cache-debug')
+  @ApiOperation({ summary: 'ดูสถานะและข้อมูลใน Cache ของ Master Data (Developer Diagnostics)' })
+  getCacheDebug() {
+    return this.masterDataService.getCacheStats();
+  }
+
   // ==========================================
   // 1. PARENT SITES
   // ==========================================

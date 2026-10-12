@@ -187,4 +187,87 @@ export class WorkstationService {
       },
     });
   }
+
+  async deleteResults(data: { resultIds: string[]; reason: string; userAccount?: string; sampleId?: string }) {
+    if (!data.reason) throw new BadRequestException('กรุณาระบุเหตุผลการลบผลตรวจแล็บ (ตาม ISO 15189)');
+    if (!data.resultIds || data.resultIds.length === 0) {
+      throw new BadRequestException('กรุณาเลือกรายการที่ต้องการลบ');
+    }
+
+    await this.prisma.testResult.updateMany({
+      where: { id: { in: data.resultIds } },
+      data: {
+        isVoided: true,
+        voidReason: data.reason,
+        voidedAt: new Date(),
+      },
+    });
+
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          action: 'DELETE_TEST_RESULTS',
+          entityType: 'TestResult',
+          entityId: data.sampleId || data.resultIds[0],
+          newValues: {
+            resultIds: data.resultIds,
+            reason: data.reason,
+            userAccount: data.userAccount,
+          },
+        },
+      });
+    } catch {}
+
+    return {
+      success: true,
+      message: `ลบผลตรวจ ${data.resultIds.length} รายการเรียบร้อยแล้ว`,
+    };
+  }
+
+  async reStatus(data: { resultIds: string[]; reason: string; targetStatus?: string; userAccount?: string; sampleId?: string }) {
+    if (!data.reason) throw new BadRequestException('กรุณาระบุเหตุผลการปรับสถานะ (ตาม ISO 15189)');
+
+    if (data.sampleId) {
+      const targetSpecimenStatus = data.targetStatus
+        ? (data.targetStatus as SpecimenStatus)
+        : SpecimenStatus.IN_PROCESS;
+
+      await this.prisma.sample.update({
+        where: { id: data.sampleId },
+        data: { status: targetSpecimenStatus },
+      });
+    }
+
+    if (data.resultIds && data.resultIds.length > 0) {
+      await this.prisma.testResult.updateMany({
+        where: { id: { in: data.resultIds } },
+        data: {
+          isApproved: false,
+          approvedAt: null,
+          approvedById: null,
+        },
+      });
+    }
+
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          action: 'RE_STATUS',
+          entityType: 'Sample',
+          entityId: data.sampleId || (data.resultIds?.[0] ?? ''),
+          newValues: {
+            resultIds: data.resultIds,
+            reason: data.reason,
+            targetStatus: data.targetStatus,
+            userAccount: data.userAccount,
+          },
+        },
+      });
+    } catch {}
+
+    return {
+      success: true,
+      message: 'ปรับสถานะเรียบร้อยแล้ว',
+    };
+  }
 }
