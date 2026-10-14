@@ -16,6 +16,7 @@ export class WorkstationService {
           include: {
             clientSite: true,
             ward: true,
+            samples: true,
           },
         },
       },
@@ -23,17 +24,24 @@ export class WorkstationService {
       take: 20,
     });
 
-    return samples.map((s, idx) => ({
-      no: idx + 1,
-      hn: s.order.hn,
-      labNo: s.labNumber,
-      sampleId: s.id,
-      patientName: s.order.patientName,
-      clientSite: s.order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
-      ward: s.order.ward?.wardName || 'OPD',
-      specimenType: s.specimenType,
-      status: s.status,
-    }));
+    return samples.map((s, idx) => {
+      // In case an order has multiple samples / specimen types, join distinct values with a comma
+      const orderSpecimenTypes = s.order?.samples && s.order.samples.length > 0
+        ? Array.from(new Set(s.order.samples.map((sm) => sm.specimenType).filter(Boolean))).join(', ')
+        : s.specimenType;
+
+      return {
+        no: idx + 1,
+        hn: s.order.hn,
+        labNo: s.labNumber,
+        sampleId: s.id,
+        patientName: s.order.patientName,
+        clientSite: s.order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+        ward: s.order.ward?.wardName || 'OPD',
+        specimenType: orderSpecimenTypes || s.specimenType,
+        status: s.status,
+      };
+    });
   }
 
   async getResults(sampleId: string) {
