@@ -154,20 +154,37 @@ export class WorkstationService {
       const current = await this.prisma.testResult.findUnique({ where: { id: item.id } });
       if (!current) continue;
 
+      let finalTestResult = item.testResult ?? current.testResult;
+      let finalRepeatResult = item.repeatResult ?? current.repeatResult;
+
+      // กรณี ตรวจซ้ำ (repeat) แล้วส่งผลมา:
+      // - ถ้าในช่อง TEST RESULT มีค่าอยู่แล้ว ให้มาลงในช่อง REPEAT RESULT แทน
+      // - แต่ถ้าช่อง TEST RESULT ว่าง (เช่น กรณี DELETE RESULT ให้เป็นช่องว่างก่อน) ให้ไปลงช่อง TEST RESULT แทนที่ช่อง REPEAT RESULT
+      if (item.repeatResult !== undefined && item.repeatResult !== null && item.repeatResult !== '') {
+        const hasExistingTestResult = current.testResult && current.testResult.trim() !== '';
+        if (hasExistingTestResult && item.testResult === undefined) {
+          finalRepeatResult = item.repeatResult;
+          finalTestResult = current.testResult;
+        } else if (!hasExistingTestResult && (item.testResult === undefined || item.testResult === '')) {
+          finalTestResult = item.repeatResult;
+          finalRepeatResult = '';
+        }
+      }
+
       let flagEnum = current.flag;
       if (item.flag) {
         if (item.flag === 'H') flagEnum = ResultFlag.HIGH;
         else if (item.flag === 'A') flagEnum = ResultFlag.ABNORMAL;
         else flagEnum = ResultFlag.NORMAL;
-      } else if (item.testResult) {
-        flagEnum = this.calculateFlag(item.testResult, current.referenceRange || '');
+      } else if (finalTestResult) {
+        flagEnum = this.calculateFlag(finalTestResult, current.referenceRange || '');
       }
 
       const res = await this.prisma.testResult.update({
         where: { id: item.id },
         data: {
-          testResult: item.testResult ?? current.testResult,
-          repeatResult: item.repeatResult ?? current.repeatResult,
+          testResult: finalTestResult,
+          repeatResult: finalRepeatResult,
           flag: flagEnum,
         },
       });
