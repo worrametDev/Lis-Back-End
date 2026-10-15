@@ -45,6 +45,22 @@ export class WorkstationService {
   }
 
   async getResults(sampleId: string) {
+    // 1. ค้นหาข้อมูล Sample ปัจจุบัน พร้อม Order และ Client Site
+    const currentSample = await this.prisma.sample.findUnique({
+      where: { id: sampleId },
+      include: {
+        order: {
+          include: {
+            clientSite: true,
+          },
+        },
+      },
+    });
+
+    const clientSiteCode = currentSample?.order?.clientSite?.siteCode;
+    const clientSiteId = currentSample?.order?.clientSiteId;
+    const hn = currentSample?.order?.hn;
+
     const results = await this.prisma.testResult.findMany({
       where: {
         sampleId,
@@ -60,25 +76,56 @@ export class WorkstationService {
       ],
     });
 
-    return results.map((r) => {
-      let flagChar: 'H' | 'A' | 'N' = 'N';
-      if (r.flag === ResultFlag.HIGH) flagChar = 'H';
-      else if (r.flag === ResultFlag.ABNORMAL || r.flag === ResultFlag.LOW) flagChar = 'A';
+    // 2. สำหรับแต่ละรายการ ค้นหาจาก client site code และ hn ตรงกัน หยิบ item ล่าสุดมาแสดง เป็นผลการตรวจครั้งล่าสุด
+    const resolvedResults = await Promise.all(
+      results.map(async (r) => {
+        let lastResultValue = r.lastResult || '';
 
-      return {
-        id: r.id,
-        dept: r.department?.departmentName || 'DEPT: HEMATOLOGY',
-        panel: r.testPanel,
-        testName: r.testName,
-        testResult: r.testResult || '',
-        flag: flagChar,
-        lastResult: r.lastResult || '',
-        unit: r.unit || '',
-        refRange: r.referenceRange || '',
-        repeatResult: r.repeatResult || '',
-        isApproved: r.isApproved,
-      };
-    });
+        if (hn && (clientSiteCode || clientSiteId)) {
+          const previousTest = await this.prisma.testResult.findFirst({
+            where: {
+              testName: r.testName,
+              isVoided: false,
+              testResult: { not: null },
+              sample: {
+                id: { not: sampleId },
+                order: {
+                  hn,
+                  clientSite: clientSiteCode
+                    ? { siteCode: clientSiteCode }
+                    : { id: clientSiteId },
+                },
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (previousTest && previousTest.testResult) {
+            lastResultValue = previousTest.testResult;
+          }
+        }
+
+        let flagChar: 'H' | 'A' | 'N' = 'N';
+        if (r.flag === ResultFlag.HIGH) flagChar = 'H';
+        else if (r.flag === ResultFlag.ABNORMAL || r.flag === ResultFlag.LOW) flagChar = 'A';
+
+        return {
+          id: r.id,
+          dept: r.department?.departmentName || 'DEPT: HEMATOLOGY',
+          panel: r.testPanel,
+          testName: r.testName,
+          testResult: r.testResult || '',
+          flag: flagChar,
+          lastResult: lastResultValue || '-',
+          unit: r.unit || '',
+          refRange: r.referenceRange || '',
+          repeatResult: r.repeatResult || '',
+          isApproved: r.isApproved,
+        };
+      })
+    );
+
+    return resolvedResults;
   }
 
   private calculateFlag(valStr?: string, refRange?: string): ResultFlag {
