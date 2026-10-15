@@ -37,6 +37,7 @@ export class SamplesService {
           },
         },
         sampleCondition: true,
+        testResults: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -56,6 +57,7 @@ export class SamplesService {
       labNo: s.labNumber,
       patientName: s.order.patientName,
       specimenType: s.specimenType,
+      profileTestName: s.testResults?.[0]?.testPanel || s.testResults?.[0]?.testName || 'Complete Blood Count (CBC)',
       condition: s.sampleCondition?.conditionName || 'ปกติ (Normal)',
       receivedAt: s.receivedAt,
       rejectedAt: s.rejectedAt,
