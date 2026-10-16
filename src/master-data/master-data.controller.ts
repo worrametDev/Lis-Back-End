@@ -31,6 +31,13 @@ export class MasterDataController {
     return this.masterDataService.getSiteInfo();
   }
 
+  @Put('master-data/site-info')
+  @ApiOperation({ summary: 'แก้ไขข้อมูลโรงพยาบาล/Site ติดตั้งของระบบ (System Administrator Only)' })
+  @ApiResponse({ status: 200, description: 'บันทึกข้อมูลโรงพยาบาลเรียบร้อยแล้ว' })
+  updateSiteInfo(@Body() body: any) {
+    return this.masterDataService.updateSiteInfo(body);
+  }
+
   @Post('parent-sites')
   @ApiOperation({ summary: 'สร้าง Parent Site ใหม่ (Create New Parent Site Modal)' })
   @ApiBody({

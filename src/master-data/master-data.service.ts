@@ -42,22 +42,118 @@ export class MasterDataService {
     const siteCode = primarySite?.siteCode || '00940';
     const province = primarySite?.province || 'พระนครศรีอยุธยา';
 
+    let hospitalNameEn = envHospitalNameEn || '';
+    if (!hospitalNameEn && siteName.includes('(') && siteName.includes(')')) {
+      const match = siteName.match(/\(([^)]+)\)/);
+      if (match) hospitalNameEn = match[1];
+    } else if (!hospitalNameEn && (siteName.includes('เสนา') || siteName.includes('Sena'))) {
+      hospitalNameEn = 'Sena Hospital';
+    }
+
     let displayName = siteName;
-    if (envHospitalNameEn && !siteName.includes('(')) {
-      displayName = `${siteName} (${envHospitalNameEn})`;
-    } else if (!siteName.includes('(') && (siteName.includes('เสนา') || siteName.includes('Sena'))) {
-      displayName = `${siteName} (Sena Hospital)`;
+    if (hospitalNameEn && !siteName.includes('(')) {
+      displayName = `${siteName} (${hospitalNameEn})`;
     }
 
     const result = {
+      id: primarySite?.id || '',
       siteCode,
       siteName,
+      hospitalNameEn,
       displayName,
       province,
+      district: primarySite?.district || '',
+      subdistrict: primarySite?.subdistrict || '',
+      address: primarySite?.address || '',
+      zipcode: primarySite?.zipcode || '',
+      lnPattern: primarySite?.lnPattern || 'LN-69{YY}{MM}{DD}{SEQ}',
       siteType: primarySite?.siteType || 'Parent Site',
     };
 
     await this.cacheManager.set('master_site_info', result, 600000); // 10 minutes
+    return result;
+  }
+
+  async updateSiteInfo(data: {
+    siteCode?: string;
+    siteName?: string;
+    hospitalNameEn?: string;
+    displayName?: string;
+    address?: string;
+    subdistrict?: string;
+    district?: string;
+    province?: string;
+    zipcode?: string;
+    lnPattern?: string;
+  }) {
+    let primarySite = await this.prisma.parentSite.findFirst({
+      where: { siteStatus: 'Active' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const siteName = data.siteName || primarySite?.siteName || 'โรงพยาบาลเสนา';
+    const hospitalNameEn = data.hospitalNameEn || '';
+
+    let displayName = data.displayName;
+    if (!displayName) {
+      if (hospitalNameEn && !siteName.includes('(')) {
+        displayName = `${siteName} (${hospitalNameEn})`;
+      } else {
+        displayName = siteName;
+      }
+    }
+
+    if (primarySite) {
+      primarySite = await this.prisma.parentSite.update({
+        where: { id: primarySite.id },
+        data: {
+          siteCode: data.siteCode || primarySite.siteCode,
+          siteName: siteName,
+          address: data.address !== undefined ? data.address : primarySite.address,
+          subdistrict: data.subdistrict !== undefined ? data.subdistrict : primarySite.subdistrict,
+          district: data.district !== undefined ? data.district : primarySite.district,
+          province: data.province !== undefined ? data.province : primarySite.province,
+          zipcode: data.zipcode !== undefined ? data.zipcode : primarySite.zipcode,
+          lnPattern: data.lnPattern !== undefined ? data.lnPattern : primarySite.lnPattern,
+        },
+      });
+    } else {
+      primarySite = await this.prisma.parentSite.create({
+        data: {
+          siteCode: data.siteCode || '00940',
+          siteName: siteName,
+          siteType: 'Parent Site',
+          siteStatus: 'Active',
+          address: data.address || '',
+          subdistrict: data.subdistrict || '',
+          district: data.district || '',
+          province: data.province || '',
+          zipcode: data.zipcode || '',
+          lnPattern: data.lnPattern || 'LN-69{YY}{MM}{DD}{SEQ}',
+        },
+      });
+    }
+
+    await this.cacheManager.del('master_site_info');
+    await this.cacheManager.del('master_parent_sites');
+    await this.cacheManager.del('user_options');
+
+    const result = {
+      id: primarySite.id,
+      siteCode: primarySite.siteCode,
+      siteName: primarySite.siteName,
+      hospitalNameEn,
+      displayName,
+      province: primarySite.province || '',
+      district: primarySite.district || '',
+      subdistrict: primarySite.subdistrict || '',
+      address: primarySite.address || '',
+      zipcode: primarySite.zipcode || '',
+      lnPattern: primarySite.lnPattern || '',
+      siteType: primarySite.siteType || 'Parent Site',
+    };
+
+    await this.cacheManager.set('master_site_info', result, 600000);
     return result;
   }
 
