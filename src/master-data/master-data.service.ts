@@ -223,6 +223,8 @@ export class MasterDataService {
       hospitalName: w.parentSite?.siteName || 'โรงพยาบาลเสนา',
       wardStatus: w.wardStatus || 'Active',
       parentSiteId: w.parentSiteId,
+      selectedSites: w.selectedSites,
+      hospitalFile: w.hospitalFile,
     }));
 
     await this.cacheManager.set('master_wards', mapped, 600000);
@@ -235,6 +237,8 @@ export class MasterDataService {
     siteCode?: string;
     wardStatus?: string;
     parentSiteId?: string;
+    selectedSites?: any;
+    hospitalFile?: string;
   }) {
     if (!data.wardCode || !data.wardName) {
       throw new BadRequestException('กรุณาระบุ WARD CODE และ WARD NAME');
@@ -253,6 +257,8 @@ export class MasterDataService {
         wardName: data.wardName,
         wardStatus: data.wardStatus || 'Active',
         parentSiteId,
+        selectedSites: data.selectedSites || (data.siteCode ? [data.siteCode] : ['ALL']),
+        hospitalFile: data.hospitalFile,
       },
       include: { parentSite: true },
     });
@@ -292,6 +298,7 @@ export class MasterDataService {
     departmentCode: string;
     departmentName: string;
     deptStatus?: string;
+    hospitalFile?: string;
   }) {
     if (!data.departmentCode || !data.departmentName) {
       throw new BadRequestException('กรุณาระบุ DEPARTMENT CODE และ DEPARTMENT NAME');
@@ -308,6 +315,7 @@ export class MasterDataService {
         departmentCode: data.departmentCode,
         departmentName: data.departmentName,
         deptStatus: data.deptStatus || 'Active',
+        hospitalFile: data.hospitalFile,
       },
     });
 
@@ -381,6 +389,258 @@ export class MasterDataService {
     const deleted = await this.prisma.sampleCondition.delete({ where: { id } });
     await this.cacheManager.del('master_sample_conditions');
     return deleted;
+  }
+
+  // ==========================================
+  // 6. TITLES (คำนำหน้าชื่อ - Database Persisted)
+  // ==========================================
+  async findAllTitles() {
+    let list = await this.prisma.title.findMany({
+      orderBy: { titleCode: 'asc' },
+    });
+    if (list.length === 0) {
+      const defaults = [
+        { titleCode: "01", titleNameTh: "นาย", titleNameEn: "Mr.", status: "Active" },
+        { titleCode: "02", titleNameTh: "นาง", titleNameEn: "Mrs.", status: "Active" },
+        { titleCode: "03", titleNameTh: "นางสาว", titleNameEn: "Miss", status: "Active" },
+        { titleCode: "04", titleNameTh: "เด็กชาย", titleNameEn: "Master", status: "Active" },
+        { titleCode: "05", titleNameTh: "เด็กหญิง", titleNameEn: "Girl", status: "Active" },
+      ];
+      for (const d of defaults) {
+        await this.prisma.title.create({ data: d }).catch(() => {});
+      }
+      list = await this.prisma.title.findMany({ orderBy: { titleCode: 'asc' } });
+    }
+    return list.map((t) => ({
+      id: t.id,
+      titleCode: t.titleCode,
+      titleName: t.titleNameTh,
+      titleNameTh: t.titleNameTh,
+      titleNameEn: t.titleNameEn,
+      name: t.titleNameTh,
+      status: t.status,
+    }));
+  }
+
+  async createTitle(data: any) {
+    const titleNameTh = data.titleNameTh || data.titleName || data.name || '';
+    const titleCode = data.titleCode || `T-${Date.now().toString().slice(-4)}`;
+    const created = await this.prisma.title.create({
+      data: {
+        titleCode,
+        titleNameTh,
+        titleNameEn: data.titleNameEn || '',
+        status: data.status || 'Active',
+      },
+    });
+    return {
+      id: created.id,
+      titleCode: created.titleCode,
+      titleName: created.titleNameTh,
+      titleNameTh: created.titleNameTh,
+      titleNameEn: created.titleNameEn,
+      name: created.titleNameTh,
+      status: created.status,
+    };
+  }
+
+  async updateTitle(id: string, data: any) {
+    const updateData: any = {};
+    if (data.titleCode) updateData.titleCode = data.titleCode;
+    if (data.titleNameTh || data.titleName || data.name) {
+      updateData.titleNameTh = data.titleNameTh || data.titleName || data.name;
+    }
+    if (data.titleNameEn !== undefined) updateData.titleNameEn = data.titleNameEn;
+    if (data.status) updateData.status = data.status;
+
+    const updated = await this.prisma.title.update({
+      where: { id },
+      data: updateData,
+    });
+    return {
+      id: updated.id,
+      titleCode: updated.titleCode,
+      titleName: updated.titleNameTh,
+      titleNameTh: updated.titleNameTh,
+      titleNameEn: updated.titleNameEn,
+      name: updated.titleNameTh,
+      status: updated.status,
+    };
+  }
+
+  async deleteTitle(id: string) {
+    await this.prisma.title.delete({ where: { id } });
+    return { success: true };
+  }
+
+  // ==========================================
+  // 7. ETHNICITIES (เชื้อชาติ - Database Persisted)
+  // ==========================================
+  async findAllEthnicities() {
+    let list = await this.prisma.ethnicity.findMany({
+      orderBy: { ethnicityCode: 'asc' },
+    });
+    if (list.length === 0) {
+      const defaults = [
+        { ethnicityCode: "TH", ethnicityNameTh: "ไทย", ethnicityNameEn: "Thai", status: "Active" },
+        { ethnicityCode: "MM", ethnicityNameTh: "เมียนมา", ethnicityNameEn: "Myanmar", status: "Active" },
+        { ethnicityCode: "LA", ethnicityNameTh: "ลาว", ethnicityNameEn: "Lao", status: "Active" },
+        { ethnicityCode: "KH", ethnicityNameTh: "กัมพูชา", ethnicityNameEn: "Cambodian", status: "Active" },
+        { ethnicityCode: "CN", ethnicityNameTh: "จีน", ethnicityNameEn: "Chinese", status: "Active" },
+        { ethnicityCode: "OTHER", ethnicityNameTh: "อื่นๆ", ethnicityNameEn: "Other", status: "Active" },
+      ];
+      for (const d of defaults) {
+        await this.prisma.ethnicity.create({ data: d }).catch(() => {});
+      }
+      list = await this.prisma.ethnicity.findMany({ orderBy: { ethnicityCode: 'asc' } });
+    }
+    return list.map((e) => ({
+      id: e.id,
+      ethnicityCode: e.ethnicityCode,
+      ethnicityName: e.ethnicityNameTh,
+      ethnicityNameTh: e.ethnicityNameTh,
+      ethnicityNameEn: e.ethnicityNameEn,
+      name: e.ethnicityNameTh,
+      status: e.status,
+    }));
+  }
+
+  async createEthnicity(data: any) {
+    const ethnicityNameTh = data.ethnicityNameTh || data.ethnicityName || data.name || '';
+    const ethnicityCode = data.ethnicityCode || `E-${Date.now().toString().slice(-4)}`;
+    const created = await this.prisma.ethnicity.create({
+      data: {
+        ethnicityCode,
+        ethnicityNameTh,
+        ethnicityNameEn: data.ethnicityNameEn || '',
+        status: data.status || 'Active',
+      },
+    });
+    return {
+      id: created.id,
+      ethnicityCode: created.ethnicityCode,
+      ethnicityName: created.ethnicityNameTh,
+      ethnicityNameTh: created.ethnicityNameTh,
+      ethnicityNameEn: created.ethnicityNameEn,
+      name: created.ethnicityNameTh,
+      status: created.status,
+    };
+  }
+
+  async updateEthnicity(id: string, data: any) {
+    const updateData: any = {};
+    if (data.ethnicityCode) updateData.ethnicityCode = data.ethnicityCode;
+    if (data.ethnicityNameTh || data.ethnicityName || data.name) {
+      updateData.ethnicityNameTh = data.ethnicityNameTh || data.ethnicityName || data.name;
+    }
+    if (data.ethnicityNameEn !== undefined) updateData.ethnicityNameEn = data.ethnicityNameEn;
+    if (data.status) updateData.status = data.status;
+
+    const updated = await this.prisma.ethnicity.update({
+      where: { id },
+      data: updateData,
+    });
+    return {
+      id: updated.id,
+      ethnicityCode: updated.ethnicityCode,
+      ethnicityName: updated.ethnicityNameTh,
+      ethnicityNameTh: updated.ethnicityNameTh,
+      ethnicityNameEn: updated.ethnicityNameEn,
+      name: updated.ethnicityNameTh,
+      status: updated.status,
+    };
+  }
+
+  async deleteEthnicity(id: string) {
+    await this.prisma.ethnicity.delete({ where: { id } });
+    return { success: true };
+  }
+
+  // ==========================================
+  // 8. TEST PANELS (ชุดการตรวจ - Database Persisted)
+  // ==========================================
+  async findAllTestPanels() {
+    let list = await this.prisma.testPanel.findMany({
+      orderBy: { panelCode: 'asc' },
+    });
+    if (list.length === 0) {
+      const defaults = [
+        { panelCode: "CBC", panelName: "Complete Blood Count Panel", specimenType: "EDTA Blood", department: "Hematology", status: "Active" },
+        { panelCode: "DM-SCREEN", panelName: "Diabetic Screen Panel (FBS, HbA1c)", specimenType: "Fluoride / EDTA Blood", department: "Chemistry", status: "Active" },
+        { panelCode: "RFT", panelName: "Renal Function Test Panel (BUN, Cr)", specimenType: "Clotted Blood", department: "Chemistry", status: "Active" },
+        { panelCode: "LIPID", panelName: "Lipid Profile Panel (CHOL, TRIG, HDL, LDL)", specimenType: "Clotted Blood", department: "Chemistry", status: "Active" },
+        { panelCode: "LFT", panelName: "Liver Function Test Panel (AST, ALT, ALP, TBIL)", specimenType: "Clotted Blood", department: "Chemistry", status: "Active" },
+        { panelCode: "UA", panelName: "Urinalysis Routine", specimenType: "Urine", department: "Microscopy", status: "Active" },
+        { panelCode: "ELECTROLYTES", panelName: "Electrolytes Panel (Na, K, Cl, CO2)", specimenType: "Clotted Blood", department: "Chemistry", status: "Active" },
+      ];
+      for (const d of defaults) {
+        await this.prisma.testPanel.create({ data: d }).catch(() => {});
+      }
+      list = await this.prisma.testPanel.findMany({ orderBy: { panelCode: 'asc' } });
+    }
+    return list.map((p) => ({
+      id: p.id,
+      panelCode: p.panelCode,
+      panelName: p.panelName,
+      code: p.panelCode,
+      name: p.panelName,
+      specimenType: p.specimenType,
+      department: p.department,
+      status: p.status,
+    }));
+  }
+
+  async createTestPanel(data: any) {
+    const panelCode = data.panelCode || data.code || `P-${Date.now().toString().slice(-4)}`;
+    const panelName = data.panelName || data.name || '';
+    const created = await this.prisma.testPanel.create({
+      data: {
+        panelCode,
+        panelName,
+        specimenType: data.specimenType,
+        department: data.department,
+        status: data.status || 'Active',
+      },
+    });
+    return {
+      id: created.id,
+      panelCode: created.panelCode,
+      panelName: created.panelName,
+      code: created.panelCode,
+      name: created.panelName,
+      specimenType: created.specimenType,
+      department: created.department,
+      status: created.status,
+    };
+  }
+
+  async updateTestPanel(id: string, data: any) {
+    const updateData: any = {};
+    if (data.panelCode || data.code) updateData.panelCode = data.panelCode || data.code;
+    if (data.panelName || data.name) updateData.panelName = data.panelName || data.name;
+    if (data.specimenType !== undefined) updateData.specimenType = data.specimenType;
+    if (data.department !== undefined) updateData.department = data.department;
+    if (data.status) updateData.status = data.status;
+
+    const updated = await this.prisma.testPanel.update({
+      where: { id },
+      data: updateData,
+    });
+    return {
+      id: updated.id,
+      panelCode: updated.panelCode,
+      panelName: updated.panelName,
+      code: updated.panelCode,
+      name: updated.panelName,
+      specimenType: updated.specimenType,
+      department: updated.department,
+      status: updated.status,
+    };
+  }
+
+  async deleteTestPanel(id: string) {
+    await this.prisma.testPanel.delete({ where: { id } });
+    return { success: true };
   }
 
   // ==========================================
