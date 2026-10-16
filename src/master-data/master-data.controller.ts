@@ -24,6 +24,13 @@ export class MasterDataController {
     return this.masterDataService.findAllParentSites();
   }
 
+  @Get('master-data/site-info')
+  @ApiOperation({ summary: 'ดึงข้อมูลโรงพยาบาล/Site ติดตั้งของระบบ (Installation Site Info for Login & Leftbar)' })
+  @ApiResponse({ status: 200, description: 'คืนค่าข้อมูลโรงพยาบาลที่ติดตั้งระบบ' })
+  getSiteInfo() {
+    return this.masterDataService.getSiteInfo();
+  }
+
   @Post('parent-sites')
   @ApiOperation({ summary: 'สร้าง Parent Site ใหม่ (Create New Parent Site Modal)' })
   @ApiBody({
