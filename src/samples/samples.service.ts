@@ -34,9 +34,11 @@ export class SamplesService {
           include: {
             clientSite: true,
             shipment: true,
+            ward: true,
           },
         },
         sampleCondition: true,
+        testResults: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -56,6 +58,14 @@ export class SamplesService {
       labNo: s.labNumber,
       patientName: s.order.patientName,
       specimenType: s.specimenType,
+      profileTestName:
+        s.profileTestName ||
+        s.testResults?.[0]?.testPanel ||
+        s.testResults?.[0]?.testName ||
+        'Complete Blood Count (CBC)',
+      healthcareEntitlement: s.order.entitlement || 'หลักประกันสุขภาพแห่งชาติ (UC)',
+      urgentStatus: s.urgentStatus || s.order.urgentStatus || 'NORMAL',
+      ward: s.order.ward?.wardName || s.order.patientType || 'ผู้ป่วยนอก (OPD)',
       condition: s.sampleCondition?.conditionName || 'ปกติ (Normal)',
       receivedAt: s.receivedAt,
       rejectedAt: s.rejectedAt,

@@ -231,4 +231,86 @@ export class MasterDataController {
   deleteSampleCondition(@Param('id') id: string) {
     return this.masterDataService.deleteSampleCondition(id);
   }
+
+  // ==========================================
+  // 6. TITLES
+  // ==========================================
+  @Get('titles')
+  @ApiOperation({ summary: 'ดึงรายการคำนำหน้าชื่อ (Titles)' })
+  findAllTitles() {
+    return this.masterDataService.findAllTitles();
+  }
+
+  @Post('titles')
+  @ApiOperation({ summary: 'สร้างคำนำหน้าชื่อใหม่' })
+  createTitle(@Body() body: any) {
+    return this.masterDataService.createTitle(body);
+  }
+
+  @Put('titles/:id')
+  @ApiOperation({ summary: 'แก้ไขคำนำหน้าชื่อ' })
+  updateTitle(@Param('id') id: string, @Body() body: any) {
+    return this.masterDataService.updateTitle(id, body);
+  }
+
+  @Delete('titles/:id')
+  @ApiOperation({ summary: 'ลบคำนำหน้าชื่อ' })
+  deleteTitle(@Param('id') id: string) {
+    return this.masterDataService.deleteTitle(id);
+  }
+
+  // ==========================================
+  // 7. ETHNICITIES
+  // ==========================================
+  @Get('ethnicities')
+  @ApiOperation({ summary: 'ดึงรายการเชื้อชาติ (Ethnicities)' })
+  findAllEthnicities() {
+    return this.masterDataService.findAllEthnicities();
+  }
+
+  @Post('ethnicities')
+  @ApiOperation({ summary: 'สร้างเชื้อชาติใหม่' })
+  createEthnicity(@Body() body: any) {
+    return this.masterDataService.createEthnicity(body);
+  }
+
+  @Put('ethnicities/:id')
+  @ApiOperation({ summary: 'แก้ไขเชื้อชาติ' })
+  updateEthnicity(@Param('id') id: string, @Body() body: any) {
+    return this.masterDataService.updateEthnicity(id, body);
+  }
+
+  @Delete('ethnicities/:id')
+  @ApiOperation({ summary: 'ลบเชื้อชาติ' })
+  deleteEthnicity(@Param('id') id: string) {
+    return this.masterDataService.deleteEthnicity(id);
+  }
+
+  // ==========================================
+  // 8. TEST PANELS
+  // ==========================================
+  @Get('test-panels')
+  @ApiOperation({ summary: 'ดึงรายการชุดการตรวจ (Test Panels)' })
+  findAllTestPanels() {
+    return this.masterDataService.findAllTestPanels();
+  }
+
+  @Post('test-panels')
+  @ApiOperation({ summary: 'สร้างชุดการตรวจใหม่' })
+  createTestPanel(@Body() body: any) {
+    return this.masterDataService.createTestPanel(body);
+  }
+
+  @Put('test-panels/:id')
+  @ApiOperation({ summary: 'แก้ไขชุดการตรวจ' })
+  updateTestPanel(@Param('id') id: string, @Body() body: any) {
+    return this.masterDataService.updateTestPanel(id, body);
+  }
+
+  @Delete('test-panels/:id')
+  @ApiOperation({ summary: 'ลบชุดการตรวจ' })
+  deleteTestPanel(@Param('id') id: string) {
+    return this.masterDataService.deleteTestPanel(id);
+  }
 }
+

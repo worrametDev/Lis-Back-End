@@ -5,7 +5,8 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 // ----------------------------------------------------
@@ -64,6 +65,8 @@ model Ward {
   wardCode     String       // e.g. "OPD", "IPD1"
   wardName     String       // e.g. "ผู้ป่วยนอก (OPD)"
   wardStatus   String?      @default("Active")
+  hospitalFile String?
+  selectedSites Json?       // รายการ client site codes เช่น ["00940-01", "00940-02"] หรือ ["ALL"]
   parentSiteId String
   parentSite   ParentSite   @relation(fields: [parentSiteId], references: [id])
   createdAt    DateTime     @default(now())
@@ -77,6 +80,7 @@ model Department {
   departmentCode String       @unique // e.g. "HEM", "CHM", "IMM"
   departmentName String       // e.g. "DEPT: HEMATOLOGY", "DEPT: CHEMISTRY"
   deptStatus     String?      @default("Active")
+  hospitalFile   String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -93,6 +97,37 @@ model SampleCondition {
   updatedAt     DateTime     @updatedAt
 
   samples       Sample[]
+}
+
+model Title {
+  id          String   @id @default(uuid())
+  titleCode   String   @unique
+  titleNameTh String
+  titleNameEn String?
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Ethnicity {
+  id              String   @id @default(uuid())
+  ethnicityCode   String   @unique
+  ethnicityNameTh String
+  ethnicityNameEn String?
+  status          String   @default("Active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model TestPanel {
+  id           String   @id @default(uuid())
+  panelCode    String   @unique
+  panelName    String
+  specimenType String?
+  department   String?
+  status       String   @default("Active")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // ----------------------------------------------------
@@ -186,6 +221,29 @@ model Order {
   passportNo     String?      // หมายเลขหนังสือเดินทาง
   patientName    String       // ชื่อ-สกุลผู้ป่วย e.g. "นายธิติธาดา พัฒลักษณ์"
   
+  title          String?      // คำนำหน้าชื่อ e.g. "นาย", "นาง", "นางสาว"
+  firstName      String?      // ชื่อจริง
+  lastName       String?      // นามสกุล
+  gender         String?      // เพศ e.g. "ชาย", "หญิง"
+  dob            String?      // วันเกิด e.g. "12/05/2530" หรือ "1987-05-12"
+  age            String?      // คำนวณอายุ e.g. "39 YEAR 4 MONTH 24 DAY"
+  nationality    String?      // สัญชาติ e.g. "THAI"
+  ethnicity      String?      // เชื้อชาติ e.g. "ไทย"
+  address        String?      // ที่อยู่
+  subdistrict    String?      // ตำบล
+  district       String?      // อำเภอ
+  province       String?      // จังหวัด
+  zipcode        String?      // รหัสไปรษณีย์
+  telephone      String?      // เบอร์โทรศัพท์
+  patientType    String?      // ประเภทผู้ป่วย e.g. "IPD", "OPD"
+  entitlement    String?      // สิทธิการรักษา e.g. "หลักประกันสุขภาพแห่งชาติ (UC)"
+  collectedDate  String?      // วันเก็บสิ่งส่งตรวจ
+  urgentStatus   String?      @default("NORMAL") // "NORMAL", "URGENT", "STAT"
+  testPanel      String?      // รหัส/ชื่อ Test Panel
+  testProfile    String?      // รหัส/ชื่อ Test Profile
+  testItem       String?      // รหัส/ชื่อ Test Item
+  orderItems     Json?        // รายการตรวจทั้งหมด [ { no, testCode, testName, specimenType, department, status } ]
+
   parentSiteId   String
   parentSite     ParentSite   @relation(fields: [parentSiteId], references: [id])
   clientSiteId   String
@@ -218,12 +276,15 @@ model Sample {
   labNumber         String           @unique // e.g. "691006002"
   specimenType      String           // e.g. "Heparinized Blood", "EDTA", "Serum"
   barcode           String?
+  profileTestName   String?          // e.g. "Complete Blood Count (CBC)"
+  urgentStatus      String?          @default("NORMAL")
   status            SpecimenStatus   @default(REGISTERED)
 
   // ข้อมูลการตรวจรับ / ปฏิเสธ (Sample Receiving)
   sampleConditionId String?
   sampleCondition   SampleCondition? @relation(fields: [sampleConditionId], references: [id])
   conditionOther    String?
+  collectedAt       DateTime?
   receivedAt        DateTime?
   receivedById      String?
   receivedBy        User?            @relation("ReceivedBy", fields: [receivedById], references: [id])
@@ -265,6 +326,8 @@ model TestResult {
   unit           String?      // e.g. "10^3 cell/ul"
   referenceRange String?      // e.g. "4.00 - 10.00"
   repeatResult   String?      // e.g. "4.48"
+  status         String?      @default("NORMAL") // Result status เช่น "NORMAL", "CRITICAL", "PENDING"
+  instrumentName String?      // ชื่อเครื่องตรวจวิเคราะห์ (Analyzer)
 
   // ตรวจสอบและอนุมัติ (Verify & Approve)
   isApproved     Boolean      @default(false)

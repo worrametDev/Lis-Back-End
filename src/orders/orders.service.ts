@@ -59,13 +59,36 @@ export class OrdersService {
           : '-',
         clientSite: o.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
         clientSiteId: o.clientSiteId,
+        parentSite: o.parentSite?.siteName || 'โรงพยาบาลเสนา',
+        parentSiteId: o.parentSiteId,
         hn: o.hn,
         labNo: firstSample?.labNumber || `69${Date.now().toString().slice(-7)}`,
         sampleId: firstSample?.id,
         patientName: o.patientName,
+        title: o.title || '',
+        firstName: o.firstName || '',
+        lastName: o.lastName || '',
+        gender: o.gender || '',
+        dob: o.dob || '',
+        age: o.age || '',
+        nationality: o.nationality || '',
+        ethnicity: o.ethnicity || '',
+        address: o.address || '',
+        subdistrict: o.subdistrict || '',
+        district: o.district || '',
+        province: o.province || '',
+        zipcode: o.zipcode || '',
+        telephone: o.telephone || '',
+        patientType: o.patientType || 'OPD',
+        entitlement: o.entitlement || 'หลักประกันสุขภาพแห่งชาติ (UC)',
+        collectedDate: o.collectedDate || '',
+        urgentStatus: o.urgentStatus || 'NORMAL',
+        ward: o.ward?.wardName || o.patientType || 'OPD',
         idCard: o.idCard || '',
         passportNo: o.passportNo || '',
-        ward: o.ward?.wardName || 'OPD',
+        specimenType: firstSample?.specimenType || 'EDTA Blood',
+        testName: firstSample?.profileTestName || o.testProfile || o.testPanel || 'Complete Blood Count (CBC)',
+        orderItems: o.orderItems || [],
         samplesCount: o.samples.length,
       };
     });
@@ -96,12 +119,43 @@ export class OrdersService {
     hn: string;
     patientName: string;
     idCard?: string;
+    passport?: string;
     passportNo?: string;
     clientSiteId?: string;
     clientSiteName?: string;
+    clientSite?: string;
+    siteCode?: string;
+    siteName?: string;
+    parentSiteId?: string;
+    parentSiteCode?: string;
+    parentSiteName?: string;
     wardId?: string;
+    ward?: string;
     specimenType?: string;
     testPanels?: string[];
+    selectedTests?: string[];
+    title?: string;
+    firstName?: string;
+    lastName?: string;
+    gender?: string;
+    dob?: string;
+    age?: string;
+    nationality?: string;
+    ethnicity?: string;
+    address?: string;
+    subdistrict?: string;
+    district?: string;
+    province?: string;
+    zipcode?: string;
+    telephone?: string;
+    patientType?: string;
+    entitlement?: string;
+    collectedDate?: string;
+    urgentStatus?: string;
+    testPanel?: string;
+    testProfile?: string;
+    testItem?: string;
+    orderItems?: any[];
   }) {
     if (!data.hn || !data.patientName) {
       throw new BadRequestException('กรุณาระบุ HN และชื่อผู้ป่วย');
@@ -112,9 +166,16 @@ export class OrdersService {
     if (data.clientSiteId) {
       clientSite = await this.prisma.clientSite.findUnique({ where: { id: data.clientSiteId } });
     }
-    if (!clientSite && data.clientSiteName) {
+    if (!clientSite && (data.siteCode || data.clientSiteName || data.clientSite || data.siteName)) {
+      const targetCode = data.siteCode;
+      const targetName = data.clientSiteName || data.clientSite || data.siteName;
       clientSite = await this.prisma.clientSite.findFirst({
-        where: { siteName: { contains: data.clientSiteName, mode: 'insensitive' } },
+        where: {
+          OR: [
+            targetCode ? { siteCode: targetCode } : {},
+            targetName ? { siteName: { contains: targetName, mode: 'insensitive' } } : {},
+          ],
+        },
       });
     }
     if (!clientSite) {
@@ -124,26 +185,71 @@ export class OrdersService {
 
     const parentSiteId = clientSite.parentSiteId;
 
+    // Resolve ward if provided
+    let wardId = data.wardId;
+    if (!wardId && data.ward) {
+      const matchedWard = await this.prisma.ward.findFirst({
+        where: {
+          OR: [
+            { wardCode: { equals: data.ward, mode: 'insensitive' } },
+            { wardName: { contains: data.ward, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (matchedWard) wardId = matchedWard.id;
+    }
+
     // Generate unique Lab Number
     const datePrefix = '69' + new Date().toISOString().slice(2, 4); // e.g. 6926
     const randomSuffix = Math.floor(10000 + Math.random() * 90000);
     const labNumber = `${datePrefix}${randomSuffix}`;
+
+    const profileTestName =
+      data.testProfile ||
+      data.testPanel ||
+      data.selectedTests?.[0] ||
+      (Array.isArray(data.orderItems) && data.orderItems[0]?.testName) ||
+      'Complete Blood Count (CBC)';
 
     // Create Order with Sample in transaction
     const order = await this.prisma.order.create({
       data: {
         hn: data.hn,
         patientName: data.patientName,
-        idCard: data.idCard,
-        passportNo: data.passportNo,
+        idCard: data.idCard || '',
+        passportNo: data.passportNo || data.passport || '',
+        title: data.title,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        gender: data.gender,
+        dob: data.dob,
+        age: data.age,
+        nationality: data.nationality || 'THAI',
+        ethnicity: data.ethnicity || 'ไทย',
+        address: data.address,
+        subdistrict: data.subdistrict,
+        district: data.district,
+        province: data.province,
+        zipcode: data.zipcode,
+        telephone: data.telephone,
+        patientType: data.patientType || 'OPD',
+        entitlement: data.entitlement || 'หลักประกันสุขภาพแห่งชาติ (UC)',
+        collectedDate: data.collectedDate,
+        urgentStatus: data.urgentStatus || 'NORMAL',
+        testPanel: data.testPanel,
+        testProfile: data.testProfile,
+        testItem: data.testItem,
+        orderItems: data.orderItems || [],
         clientSiteId: clientSite.id,
         parentSiteId,
-        wardId: data.wardId,
+        wardId,
         status: OrderStatus.REGISTERED,
         samples: {
           create: {
             labNumber,
-            specimenType: data.specimenType || 'Heparinized Blood',
+            specimenType: data.specimenType || 'EDTA Blood',
+            profileTestName,
+            urgentStatus: data.urgentStatus || 'NORMAL',
             barcode: labNumber,
             status: SpecimenStatus.REGISTERED,
           },
@@ -152,40 +258,62 @@ export class OrdersService {
       include: {
         samples: true,
         clientSite: true,
+        parentSite: true,
+        ward: true,
       },
     });
 
     const createdSample = order.samples[0];
 
-    // Auto-create Test Results for hematology/chemistry panels
-    const defaultDept = await this.prisma.department.findFirst({
-      where: { departmentCode: 'HEM' },
-    }) || await this.prisma.department.findFirst();
+    // Create Test Results for hematology/chemistry
+    const defaultDept =
+      (await this.prisma.department.findFirst({
+        where: { departmentCode: 'HEM' },
+      })) || (await this.prisma.department.findFirst());
 
     if (defaultDept && createdSample) {
-      const testsToCreate = [
-        { testPanel: 'CBC', testName: 'WBC Count', unit: '10^3 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
-        { testPanel: 'CBC', testName: 'RBC Count', unit: '10^6 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
-        { testPanel: 'CBC', testName: 'Hemoglobin', unit: 'g/dL', referenceRange: '12.00 - 16.00', testResult: '14.2', flag: ResultFlag.NORMAL, lastResult: '13.8', repeatResult: '14.1' },
-        { testPanel: 'CBC', testName: 'Hematocrit', unit: '%', referenceRange: '36.0 - 48.0', testResult: '42.5', flag: ResultFlag.NORMAL, lastResult: '41.0', repeatResult: '42.3' },
-        { testPanel: 'CBC', testName: 'Platelet Count', unit: '10^3 cell/ul', referenceRange: '140 - 400', testResult: '285', flag: ResultFlag.NORMAL, lastResult: '270', repeatResult: '280' },
-      ];
+      if (Array.isArray(data.orderItems) && data.orderItems.length > 0) {
+        for (const item of data.orderItems) {
+          await this.prisma.testResult.create({
+            data: {
+              sampleId: createdSample.id,
+              departmentId: defaultDept.id,
+              testPanel: item.testCode || 'CBC',
+              testName: item.testName || 'Test Item',
+              unit: item.unit || '-',
+              referenceRange: item.referenceRange || '-',
+              testResult: item.testResult || null,
+              flag: ResultFlag.NORMAL,
+              lastResult: item.lastResult || null,
+              repeatResult: item.repeatResult || null,
+            },
+          });
+        }
+      } else {
+        const testsToCreate = [
+          { testPanel: 'CBC', testName: 'WBC Count', unit: '10^3 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
+          { testPanel: 'CBC', testName: 'RBC Count', unit: '10^6 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
+          { testPanel: 'CBC', testName: 'Hemoglobin', unit: 'g/dL', referenceRange: '12.00 - 16.00', testResult: '14.2', flag: ResultFlag.NORMAL, lastResult: '13.8', repeatResult: '14.1' },
+          { testPanel: 'CBC', testName: 'Hematocrit', unit: '%', referenceRange: '36.0 - 48.0', testResult: '42.5', flag: ResultFlag.NORMAL, lastResult: '41.0', repeatResult: '42.3' },
+          { testPanel: 'CBC', testName: 'Platelet Count', unit: '10^3 cell/ul', referenceRange: '140 - 400', testResult: '285', flag: ResultFlag.NORMAL, lastResult: '270', repeatResult: '280' },
+        ];
 
-      for (const t of testsToCreate) {
-        await this.prisma.testResult.create({
-          data: {
-            sampleId: createdSample.id,
-            departmentId: defaultDept.id,
-            testPanel: t.testPanel,
-            testName: t.testName,
-            unit: t.unit,
-            referenceRange: t.referenceRange,
-            testResult: t.testResult,
-            flag: t.flag,
-            lastResult: t.lastResult,
-            repeatResult: t.repeatResult,
-          },
-        });
+        for (const t of testsToCreate) {
+          await this.prisma.testResult.create({
+            data: {
+              sampleId: createdSample.id,
+              departmentId: defaultDept.id,
+              testPanel: t.testPanel,
+              testName: t.testName,
+              unit: t.unit,
+              referenceRange: t.referenceRange,
+              testResult: t.testResult,
+              flag: t.flag,
+              lastResult: t.lastResult,
+              repeatResult: t.repeatResult,
+            },
+          });
+        }
       }
     }
 
@@ -196,9 +324,14 @@ export class OrdersService {
       created: order.createdAt.toLocaleDateString('th-TH'),
       received: '-',
       clientSite: order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      clientSiteId: order.clientSiteId,
       hn: order.hn,
       labNo: labNumber,
       patientName: order.patientName,
+      specimenType: data.specimenType || 'EDTA Blood',
+      testName: profileTestName,
+      ward: order.ward?.wardName || order.patientType || 'OPD',
+      urgentStatus: order.urgentStatus || 'NORMAL',
     };
   }
 
@@ -216,3 +349,4 @@ export class OrdersService {
     });
   }
 }
+

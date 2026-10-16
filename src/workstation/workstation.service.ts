@@ -16,6 +16,7 @@ export class WorkstationService {
           include: {
             clientSite: true,
             ward: true,
+            samples: true,
           },
         },
       },
@@ -23,20 +24,43 @@ export class WorkstationService {
       take: 20,
     });
 
-    return samples.map((s, idx) => ({
-      no: idx + 1,
-      hn: s.order.hn,
-      labNo: s.labNumber,
-      sampleId: s.id,
-      patientName: s.order.patientName,
-      clientSite: s.order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
-      ward: s.order.ward?.wardName || 'OPD',
-      specimenType: s.specimenType,
-      status: s.status,
-    }));
+    return samples.map((s, idx) => {
+      // In case an order has multiple samples / specimen types, join distinct values with a comma
+      const orderSpecimenTypes = s.order?.samples && s.order.samples.length > 0
+        ? Array.from(new Set(s.order.samples.map((sm) => sm.specimenType).filter(Boolean))).join(', ')
+        : s.specimenType;
+
+      return {
+        no: idx + 1,
+        hn: s.order.hn,
+        labNo: s.labNumber,
+        sampleId: s.id,
+        patientName: s.order.patientName,
+        clientSite: s.order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+        ward: s.order.ward?.wardName || 'OPD',
+        specimenType: orderSpecimenTypes || s.specimenType,
+        status: s.status,
+      };
+    });
   }
 
   async getResults(sampleId: string) {
+    // 1. ค้นหาข้อมูล Sample ปัจจุบัน พร้อม Order และ Client Site
+    const currentSample = await this.prisma.sample.findUnique({
+      where: { id: sampleId },
+      include: {
+        order: {
+          include: {
+            clientSite: true,
+          },
+        },
+      },
+    });
+
+    const clientSiteCode = currentSample?.order?.clientSite?.siteCode;
+    const clientSiteId = currentSample?.order?.clientSiteId;
+    const hn = currentSample?.order?.hn;
+
     const results = await this.prisma.testResult.findMany({
       where: {
         sampleId,
@@ -52,25 +76,56 @@ export class WorkstationService {
       ],
     });
 
-    return results.map((r) => {
-      let flagChar: 'H' | 'A' | 'N' = 'N';
-      if (r.flag === ResultFlag.HIGH) flagChar = 'H';
-      else if (r.flag === ResultFlag.ABNORMAL || r.flag === ResultFlag.LOW) flagChar = 'A';
+    // 2. สำหรับแต่ละรายการ ค้นหาจาก client site code และ hn ตรงกัน หยิบ item ล่าสุดมาแสดง เป็นผลการตรวจครั้งล่าสุด
+    const resolvedResults = await Promise.all(
+      results.map(async (r) => {
+        let lastResultValue = r.lastResult || '';
 
-      return {
-        id: r.id,
-        dept: r.department?.departmentName || 'DEPT: HEMATOLOGY',
-        panel: r.testPanel,
-        testName: r.testName,
-        testResult: r.testResult || '',
-        flag: flagChar,
-        lastResult: r.lastResult || '',
-        unit: r.unit || '',
-        refRange: r.referenceRange || '',
-        repeatResult: r.repeatResult || '',
-        isApproved: r.isApproved,
-      };
-    });
+        if (hn && (clientSiteCode || clientSiteId)) {
+          const previousTest = await this.prisma.testResult.findFirst({
+            where: {
+              testName: r.testName,
+              isVoided: false,
+              testResult: { not: null },
+              sample: {
+                id: { not: sampleId },
+                order: {
+                  hn,
+                  clientSite: clientSiteCode
+                    ? { siteCode: clientSiteCode }
+                    : { id: clientSiteId },
+                },
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (previousTest && previousTest.testResult) {
+            lastResultValue = previousTest.testResult;
+          }
+        }
+
+        let flagChar: 'H' | 'A' | 'N' = 'N';
+        if (r.flag === ResultFlag.HIGH) flagChar = 'H';
+        else if (r.flag === ResultFlag.ABNORMAL || r.flag === ResultFlag.LOW) flagChar = 'A';
+
+        return {
+          id: r.id,
+          dept: r.department?.departmentName || 'DEPT: HEMATOLOGY',
+          panel: r.testPanel,
+          testName: r.testName,
+          testResult: r.testResult || '',
+          flag: flagChar,
+          lastResult: lastResultValue || '-',
+          unit: r.unit || '',
+          refRange: r.referenceRange || '',
+          repeatResult: r.repeatResult || '',
+          isApproved: r.isApproved,
+        };
+      })
+    );
+
+    return resolvedResults;
   }
 
   private calculateFlag(valStr?: string, refRange?: string): ResultFlag {
@@ -99,20 +154,37 @@ export class WorkstationService {
       const current = await this.prisma.testResult.findUnique({ where: { id: item.id } });
       if (!current) continue;
 
+      let finalTestResult = item.testResult ?? current.testResult;
+      let finalRepeatResult = item.repeatResult ?? current.repeatResult;
+
+      // กรณี ตรวจซ้ำ (repeat) แล้วส่งผลมา:
+      // - ถ้าในช่อง TEST RESULT มีค่าอยู่แล้ว ให้มาลงในช่อง REPEAT RESULT แทน
+      // - แต่ถ้าช่อง TEST RESULT ว่าง (เช่น กรณี DELETE RESULT ให้เป็นช่องว่างก่อน) ให้ไปลงช่อง TEST RESULT แทนที่ช่อง REPEAT RESULT
+      if (item.repeatResult !== undefined && item.repeatResult !== null && item.repeatResult !== '') {
+        const hasExistingTestResult = current.testResult && current.testResult.trim() !== '';
+        if (hasExistingTestResult && item.testResult === undefined) {
+          finalRepeatResult = item.repeatResult;
+          finalTestResult = current.testResult;
+        } else if (!hasExistingTestResult && (item.testResult === undefined || item.testResult === '')) {
+          finalTestResult = item.repeatResult;
+          finalRepeatResult = '';
+        }
+      }
+
       let flagEnum = current.flag;
       if (item.flag) {
         if (item.flag === 'H') flagEnum = ResultFlag.HIGH;
         else if (item.flag === 'A') flagEnum = ResultFlag.ABNORMAL;
         else flagEnum = ResultFlag.NORMAL;
-      } else if (item.testResult) {
-        flagEnum = this.calculateFlag(item.testResult, current.referenceRange || '');
+      } else if (finalTestResult) {
+        flagEnum = this.calculateFlag(finalTestResult, current.referenceRange || '');
       }
 
       const res = await this.prisma.testResult.update({
         where: { id: item.id },
         data: {
-          testResult: item.testResult ?? current.testResult,
-          repeatResult: item.repeatResult ?? current.repeatResult,
+          testResult: finalTestResult,
+          repeatResult: finalRepeatResult,
           flag: flagEnum,
         },
       });
