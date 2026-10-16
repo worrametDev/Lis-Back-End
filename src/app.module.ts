@@ -12,6 +12,7 @@ import { SamplesModule } from './samples/samples.module';
 import { WorkstationModule } from './workstation/workstation.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { MiddlewareModule } from './middleware/middleware.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { UploadsModule } from './uploads/uploads.module';
     WorkstationModule,
     DashboardModule,
     UploadsModule,
+    MiddlewareModule,
   ],
   controllers: [AppController],
   providers: [AppService],
