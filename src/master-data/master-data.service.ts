@@ -26,6 +26,41 @@ export class MasterDataService {
     return sites;
   }
 
+  async getSiteInfo() {
+    const cached = await this.cacheManager.get<any>('master_site_info');
+    if (cached) return cached;
+
+    const primarySite = await this.prisma.parentSite.findFirst({
+      where: { siteStatus: 'Active' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const envHospitalName = process.env.HOSPITAL_NAME;
+    const envHospitalNameEn = process.env.HOSPITAL_NAME_EN;
+
+    const siteName = primarySite?.siteName || envHospitalName || 'โรงพยาบาลเสนา';
+    const siteCode = primarySite?.siteCode || '00940';
+    const province = primarySite?.province || 'พระนครศรีอยุธยา';
+
+    let displayName = siteName;
+    if (envHospitalNameEn && !siteName.includes('(')) {
+      displayName = `${siteName} (${envHospitalNameEn})`;
+    } else if (!siteName.includes('(') && (siteName.includes('เสนา') || siteName.includes('Sena'))) {
+      displayName = `${siteName} (Sena Hospital)`;
+    }
+
+    const result = {
+      siteCode,
+      siteName,
+      displayName,
+      province,
+      siteType: primarySite?.siteType || 'Parent Site',
+    };
+
+    await this.cacheManager.set('master_site_info', result, 600000); // 10 minutes
+    return result;
+  }
+
   async createParentSite(data: {
     siteCode: string;
     siteName: string;
@@ -68,6 +103,7 @@ export class MasterDataService {
     });
 
     await this.cacheManager.del('master_parent_sites');
+    await this.cacheManager.del('master_site_info');
     await this.cacheManager.del('user_options');
     return created;
   }
@@ -78,6 +114,7 @@ export class MasterDataService {
       data,
     });
     await this.cacheManager.del('master_parent_sites');
+    await this.cacheManager.del('master_site_info');
     await this.cacheManager.del('user_options');
     return updated;
   }
@@ -85,6 +122,7 @@ export class MasterDataService {
   async deleteParentSite(id: string) {
     const deleted = await this.prisma.parentSite.delete({ where: { id } });
     await this.cacheManager.del('master_parent_sites');
+    await this.cacheManager.del('master_site_info');
     await this.cacheManager.del('user_options');
     return deleted;
   }

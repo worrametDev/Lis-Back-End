@@ -36,8 +36,17 @@ export class AuthService {
     return result;
   }
 
+  private async getDefaultParentSiteName(): Promise<string> {
+    const primarySite = await this.prisma.parentSite.findFirst({
+      where: { siteStatus: 'Active' },
+      orderBy: { createdAt: 'asc' },
+    });
+    return primarySite?.siteName || process.env.HOSPITAL_NAME || 'โรงพยาบาลเสนา';
+  }
+
   async login(username: string, pass: string) {
     const user = await this.validateUser(username, pass);
+    const defaultParent = await this.getDefaultParentSiteName();
     const payload = {
       sub: user.id,
       username: user.username,
@@ -56,7 +65,7 @@ export class AuthService {
         email: user.email,
         role: user.userRole,
         status: user.userStatus,
-        parentSite: user.parentSite?.siteName || 'โรงพยาบาลเสนา',
+        parentSite: user.parentSite?.siteName || defaultParent,
         clientSite: user.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
         licenseNo: user.licenseNo,
       },
@@ -74,13 +83,14 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('ไม่พบข้อมูลผู้ใช้งาน');
     }
+    const defaultParent = await this.getDefaultParentSiteName();
     const { passwordHash, ...result } = user;
     return {
       ...result,
       fullname: `${user.firstName} ${user.lastName}`.trim(),
       role: user.userRole,
       status: user.userStatus,
-      parentSite: user.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSite: user.parentSite?.siteName || defaultParent,
       clientSite: user.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
     };
   }
