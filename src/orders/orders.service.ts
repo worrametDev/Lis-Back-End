@@ -1,10 +1,15 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderStatus, SpecimenStatus, ResultFlag } from '@prisma/client';
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   async findAll(query?: {
     search?: string;
@@ -317,6 +322,10 @@ export class OrdersService {
       }
     }
 
+    try {
+      await this.cacheManager.del('dashboard_stats');
+    } catch {}
+
     return {
       id: order.id,
       no: 1,
@@ -337,6 +346,9 @@ export class OrdersService {
   }
 
   async update(id: string, data: any) {
+    try {
+      await this.cacheManager.del('dashboard_stats');
+    } catch {}
     return this.prisma.order.update({
       where: { id },
       data,
@@ -344,6 +356,9 @@ export class OrdersService {
   }
 
   async cancel(id: string) {
+    try {
+      await this.cacheManager.del('dashboard_stats');
+    } catch {}
     return this.prisma.order.update({
       where: { id },
       data: { status: OrderStatus.CANCELLED },

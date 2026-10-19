@@ -1,12 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderStatus, SpecimenStatus } from '@prisma/client';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   async getStats() {
+    const cacheKey = 'dashboard_stats';
+    const cached = await this.cacheManager.get<any>(cacheKey);
+    if (cached) return cached;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -37,11 +46,14 @@ export class DashboardService {
       }),
     ]);
 
-    return {
+    const stats = {
       pendingOrders: pendingOrdersCount || 14,
       pendingSamples: pendingSamplesCount || 8,
       pendingApproval: pendingApprovalCount || 5,
       approvedToday: approvedTodayCount || 142,
     };
+
+    await this.cacheManager.set(cacheKey, stats, 15000); // 15 seconds cache
+    return stats;
   }
 }

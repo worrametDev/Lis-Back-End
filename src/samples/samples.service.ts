@@ -1,10 +1,15 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpecimenStatus, OrderStatus } from '@prisma/client';
 
 @Injectable()
 export class SamplesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   async findAll(query?: {
     status?: string;
@@ -103,6 +108,10 @@ export class SamplesService {
       data: { status: OrderStatus.RECEIVED },
     });
 
+    try {
+      await this.cacheManager.del('dashboard_stats');
+    } catch {}
+
     return {
       success: true,
       receivedCount: updated.count,
@@ -142,6 +151,10 @@ export class SamplesService {
         rejectedById: data.rejectedById,
       },
     });
+
+    try {
+      await this.cacheManager.del('dashboard_stats');
+    } catch {}
 
     return {
       success: true,
