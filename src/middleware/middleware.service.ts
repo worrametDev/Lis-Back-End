@@ -128,45 +128,49 @@ export class MiddlewareService {
       const department = await this.prisma.department.findFirst();
       const departmentId = department?.id || 'default-dept';
 
-      for (const res of results) {
-        // Map flag
-        let flagEnum: ResultFlag = ResultFlag.NORMAL;
-        if (res.flag === 'H' || res.flag === 'HIGH') flagEnum = ResultFlag.HIGH;
-        if (res.flag === 'L' || res.flag === 'LOW') flagEnum = ResultFlag.LOW;
-        if (res.flag === 'A' || res.flag === 'ABNORMAL') flagEnum = ResultFlag.ABNORMAL;
+      await Promise.all(
+        results.map(async (res) => {
+          // Map flag
+          let flagEnum: ResultFlag = ResultFlag.NORMAL;
+          if (res.flag === 'H' || res.flag === 'HIGH') flagEnum = ResultFlag.HIGH;
+          if (res.flag === 'L' || res.flag === 'LOW') flagEnum = ResultFlag.LOW;
+          if (res.flag === 'A' || res.flag === 'ABNORMAL') flagEnum = ResultFlag.ABNORMAL;
 
-        // Check if test result already exists for this testName
-        const existingResult = sample.testResults.find(
-          (tr) => tr.testName.toUpperCase() === res.testCode.toUpperCase() || tr.testPanel.toUpperCase() === res.testCode.toUpperCase(),
-        );
+          // Check if test result already exists for this testName
+          const existingResult = sample.testResults.find(
+            (tr) =>
+              tr.testName.toUpperCase() === res.testCode.toUpperCase() ||
+              tr.testPanel.toUpperCase() === res.testCode.toUpperCase(),
+          );
 
-        if (existingResult) {
-          await this.prisma.testResult.update({
-            where: { id: existingResult.id },
-            data: {
-              testResult: res.value,
-              flag: flagEnum,
-              unit: res.unit || existingResult.unit,
-              instrumentName: instrument.model || instrument.channel,
-              updatedAt: new Date(),
-            },
-          });
-        } else if (departmentId) {
-          await this.prisma.testResult.create({
-            data: {
-              sampleId: sample.id,
-              departmentId,
-              testPanel: res.testCode,
-              testName: res.testCode,
-              testResult: res.value,
-              flag: flagEnum,
-              unit: res.unit || 'mg/dL',
-              instrumentName: instrument.model || instrument.channel,
-              status: 'NORMAL',
-            },
-          });
-        }
-      }
+          if (existingResult) {
+            return this.prisma.testResult.update({
+              where: { id: existingResult.id },
+              data: {
+                testResult: res.value,
+                flag: flagEnum,
+                unit: res.unit || existingResult.unit,
+                instrumentName: instrument.model || instrument.channel,
+                updatedAt: new Date(),
+              },
+            });
+          } else if (departmentId) {
+            return this.prisma.testResult.create({
+              data: {
+                sampleId: sample.id,
+                departmentId,
+                testPanel: res.testCode,
+                testName: res.testCode,
+                testResult: res.value,
+                flag: flagEnum,
+                unit: res.unit || 'mg/dL',
+                instrumentName: instrument.model || instrument.channel,
+                status: 'NORMAL',
+              },
+            });
+          }
+        }),
+      );
 
       // Update sample status to IN_PROCESS
       await this.prisma.sample.update({
@@ -178,6 +182,7 @@ export class MiddlewareService {
       });
 
       await this.cacheManager.del(`workstation_results_${sample.id}`);
+      await this.cacheManager.del('dashboard_stats');
     } else {
       this.logger.warn(`Sample with labNumber ${labNumber} not found in Cloud LIS database. Result recorded as unlinked.`);
     }

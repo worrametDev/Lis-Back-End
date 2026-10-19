@@ -6,10 +6,12 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 import * as cookieParser from 'cookie-parser';
+import * as compression from 'compression';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  app.use(compression());
   app.use(cookieParser());
 
   const rawOrigins = process.env.CORS_ORIGIN || '';
