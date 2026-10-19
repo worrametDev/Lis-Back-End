@@ -327,6 +327,7 @@ export class OrdersService {
       clientSiteId: order.clientSiteId,
       hn: order.hn,
       labNo: labNumber,
+      sampleId: createdSample?.id,
       patientName: order.patientName,
       specimenType: data.specimenType || 'EDTA Blood',
       testName: profileTestName,

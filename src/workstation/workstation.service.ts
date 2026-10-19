@@ -203,6 +203,21 @@ export class WorkstationService {
       throw new BadRequestException('กรุณาระบุ Sample ID หรือ Result IDs ที่ต้องการอนุมัติ');
     }
 
+    let userUuid: string | undefined = undefined;
+    if (data.approvedById) {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: data.approvedById },
+            { username: data.approvedById },
+          ],
+        },
+      });
+      if (user) {
+        userUuid = user.id;
+      }
+    }
+
     let sampleId = data.sampleId;
     if (data.resultIds && data.resultIds.length > 0) {
       await this.prisma.testResult.updateMany({
@@ -210,7 +225,7 @@ export class WorkstationService {
         data: {
           isApproved: true,
           approvedAt: new Date(),
-          approvedById: data.approvedById,
+          approvedById: userUuid,
         },
       });
       if (!sampleId) {
@@ -223,7 +238,7 @@ export class WorkstationService {
         data: {
           isApproved: true,
           approvedAt: new Date(),
-          approvedById: data.approvedById,
+          approvedById: userUuid,
         },
       });
     }
