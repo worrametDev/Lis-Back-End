@@ -77,12 +77,13 @@ export class SamplesService {
     autoBarcode?: boolean;
     receivedById?: string;
   }) {
-    if (!data.sampleIds || data.sampleIds.length === 0) {
+    const validSampleIds = (data.sampleIds || []).filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+    if (validSampleIds.length === 0) {
       throw new BadRequestException('กรุณาระบุรายการสิ่งส่งตรวจที่ต้องการตรวจรับ');
     }
 
     const updated = await this.prisma.sample.updateMany({
-      where: { id: { in: data.sampleIds } },
+      where: { id: { in: validSampleIds } },
       data: {
         status: SpecimenStatus.RECEIVED,
         receivedAt: new Date(),
