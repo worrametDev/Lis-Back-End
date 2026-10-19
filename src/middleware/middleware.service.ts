@@ -1,4 +1,6 @@
-import { Injectable, Logger, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, ConflictException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResultFlag, SpecimenStatus, OrderStatus } from '@prisma/client';
 
@@ -27,7 +29,10 @@ export class MiddlewareService {
   private readonly logger = new Logger(MiddlewareService.name);
   private readonly processedMessageIds = new Set<string>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   /**
    * Get orders to sync down to Local Middleware
@@ -171,6 +176,8 @@ export class MiddlewareService {
           updatedAt: new Date(),
         },
       });
+
+      await this.cacheManager.del(`workstation_results_${sample.id}`);
     } else {
       this.logger.warn(`Sample with labNumber ${labNumber} not found in Cloud LIS database. Result recorded as unlinked.`);
     }

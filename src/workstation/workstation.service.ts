@@ -1,10 +1,15 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResultFlag, SpecimenStatus, OrderStatus } from '@prisma/client';
 
 @Injectable()
 export class WorkstationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   async getQueue() {
     const samples = await this.prisma.sample.findMany({
@@ -45,6 +50,10 @@ export class WorkstationService {
   }
 
   async getResults(sampleId: string) {
+    const cacheKey = `workstation_results_${sampleId}`;
+    const cached = await this.cacheManager.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     // 1. ค้นหาข้อมูล Sample ปัจจุบัน พร้อม Order และ Client Site
     const currentSample = await this.prisma.sample.findUnique({
       where: { id: sampleId },
@@ -76,55 +85,56 @@ export class WorkstationService {
       ],
     });
 
-    // 2. สำหรับแต่ละรายการ ค้นหาจาก client site code และ hn ตรงกัน หยิบ item ล่าสุดมาแสดง เป็นผลการตรวจครั้งล่าสุด
-    const resolvedResults = await Promise.all(
-      results.map(async (r) => {
-        let lastResultValue = r.lastResult || '';
-
-        if (hn && (clientSiteCode || clientSiteId)) {
-          const previousTest = await this.prisma.testResult.findFirst({
-            where: {
-              testName: r.testName,
-              isVoided: false,
-              testResult: { not: null },
-              sample: {
-                id: { not: sampleId },
-                order: {
-                  hn,
-                  clientSite: clientSiteCode
-                    ? { siteCode: clientSiteCode }
-                    : { id: clientSiteId },
-                },
-              },
+    // 2. Optimization: Batch fetch all historical previous tests for this patient in ONE single query!
+    const previousTestMap = new Map<string, string>();
+    if (results.length > 0 && hn && (clientSiteCode || clientSiteId)) {
+      const testNames = Array.from(new Set(results.map((r) => r.testName)));
+      const previousTests = await this.prisma.testResult.findMany({
+        where: {
+          testName: { in: testNames },
+          isVoided: false,
+          testResult: { not: null },
+          sample: {
+            id: { not: sampleId },
+            order: {
+              hn,
+              ...(clientSiteId ? { clientSiteId } : {}),
             },
-            orderBy: { createdAt: 'desc' },
-          });
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
 
-          if (previousTest && previousTest.testResult) {
-            lastResultValue = previousTest.testResult;
-          }
+      for (const pt of previousTests) {
+        if (!previousTestMap.has(pt.testName) && pt.testResult) {
+          previousTestMap.set(pt.testName, pt.testResult);
         }
+      }
+    }
 
-        let flagChar: 'H' | 'A' | 'N' = 'N';
-        if (r.flag === ResultFlag.HIGH) flagChar = 'H';
-        else if (r.flag === ResultFlag.ABNORMAL || r.flag === ResultFlag.LOW) flagChar = 'A';
+    const resolvedResults = results.map((r) => {
+      const lastResultValue = r.lastResult || previousTestMap.get(r.testName) || '-';
 
-        return {
-          id: r.id,
-          dept: r.department?.departmentName || 'DEPT: HEMATOLOGY',
-          panel: r.testPanel,
-          testName: r.testName,
-          testResult: r.testResult || '',
-          flag: flagChar,
-          lastResult: lastResultValue || '-',
-          unit: r.unit || '',
-          refRange: r.referenceRange || '',
-          repeatResult: r.repeatResult || '',
-          isApproved: r.isApproved,
-        };
-      })
-    );
+      let flagChar: 'H' | 'A' | 'N' = 'N';
+      if (r.flag === ResultFlag.HIGH) flagChar = 'H';
+      else if (r.flag === ResultFlag.ABNORMAL || r.flag === ResultFlag.LOW) flagChar = 'A';
 
+      return {
+        id: r.id,
+        dept: r.department?.departmentName || 'DEPT: HEMATOLOGY',
+        panel: r.testPanel,
+        testName: r.testName,
+        testResult: r.testResult || '',
+        flag: flagChar,
+        lastResult: lastResultValue,
+        unit: r.unit || '',
+        refRange: r.referenceRange || '',
+        repeatResult: r.repeatResult || '',
+        isApproved: r.isApproved,
+      };
+    });
+
+    await this.cacheManager.set(cacheKey, resolvedResults, 30 * 1000);
     return resolvedResults;
   }
 
@@ -150,9 +160,11 @@ export class WorkstationService {
     }
 
     const updated = [];
+    const affectedSampleIds = new Set<string>();
     for (const item of items) {
       const current = await this.prisma.testResult.findUnique({ where: { id: item.id } });
       if (!current) continue;
+      affectedSampleIds.add(current.sampleId);
 
       let finalTestResult = item.testResult ?? current.testResult;
       let finalRepeatResult = item.repeatResult ?? current.repeatResult;
@@ -189,6 +201,10 @@ export class WorkstationService {
         },
       });
       updated.push(res);
+    }
+
+    for (const sId of affectedSampleIds) {
+      await this.cacheManager.del(`workstation_results_${sId}`);
     }
 
     return {
@@ -244,6 +260,7 @@ export class WorkstationService {
     }
 
     if (sampleId) {
+      await this.cacheManager.del(`workstation_results_${sampleId}`);
       await this.prisma.sample.update({
         where: { id: sampleId },
         data: { status: SpecimenStatus.APPROVED },
@@ -305,6 +322,10 @@ export class WorkstationService {
       });
     } catch {}
 
+    if (data.sampleId) {
+      await this.cacheManager.del(`workstation_results_${data.sampleId}`);
+    }
+
     return {
       success: true,
       message: `ลบผลตรวจ ${data.resultIds.length} รายการเรียบร้อยแล้ว`,
@@ -315,6 +336,7 @@ export class WorkstationService {
     if (!data.reason) throw new BadRequestException('กรุณาระบุเหตุผลการปรับสถานะ (ตาม ISO 15189)');
 
     if (data.sampleId) {
+      await this.cacheManager.del(`workstation_results_${data.sampleId}`);
       const targetSpecimenStatus = data.targetStatus
         ? (data.targetStatus as SpecimenStatus)
         : SpecimenStatus.IN_PROCESS;
