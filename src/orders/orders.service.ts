@@ -36,12 +36,17 @@ export class OrdersService {
         parentSite: true,
         ward: true,
         samples: {
-          include: {
-            testResults: true,
+          select: {
+            id: true,
+            labNumber: true,
+            specimenType: true,
+            profileTestName: true,
+            receivedAt: true,
           },
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: 200,
     });
 
     return orders.map((o, idx) => {

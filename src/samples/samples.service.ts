@@ -43,9 +43,16 @@ export class SamplesService {
           },
         },
         sampleCondition: true,
-        testResults: true,
+        testResults: {
+          take: 1,
+          select: {
+            testPanel: true,
+            testName: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
+      take: 200,
     });
 
     return samples.map((s, idx) => ({
