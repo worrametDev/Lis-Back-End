@@ -58,6 +58,9 @@ model ClientSite {
   users          User[]
   orders         Order[]
   shipments      Shipment[]
+
+  @@index([parentSiteId])
+  @@index([siteStatus])
 }
 
 model Ward {
@@ -73,6 +76,8 @@ model Ward {
   updatedAt    DateTime     @updatedAt
 
   orders       Order[]
+
+  @@index([parentSiteId])
 }
 
 model Department {
@@ -175,6 +180,10 @@ model User {
   rejectedSamples Sample[]  @relation("RejectedBy")
   approvedResults TestResult[] @relation("ApprovedBy")
   auditLogs       AuditLog[]
+
+  @@index([userRole, userStatus])
+  @@index([parentSiteId])
+  @@index([clientSiteId])
 }
 
 // ----------------------------------------------------
@@ -199,6 +208,9 @@ model Shipment {
   updatedAt      DateTime       @updatedAt
 
   orders         Order[]
+
+  @@index([clientSiteId, status])
+  @@index([status, createdAt(sort: Desc)])
 }
 
 // ----------------------------------------------------
@@ -258,6 +270,13 @@ model Order {
   updatedAt      DateTime     @updatedAt
 
   samples        Sample[]
+
+  @@index([hn])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@index([clientSiteId, status])
+  @@index([parentSiteId])
+  @@index([status, createdAt(sort: Desc)])
 }
 
 enum SpecimenStatus {
@@ -298,6 +317,13 @@ model Sample {
   updatedAt         DateTime         @updatedAt
 
   testResults       TestResult[]
+
+  @@index([orderId])
+  @@index([status])
+  @@index([barcode])
+  @@index([createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([sampleConditionId])
 }
 
 // ----------------------------------------------------
@@ -342,6 +368,12 @@ model TestResult {
 
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  @@index([sampleId])
+  @@index([sampleId, isVoided])
+  @@index([testName, isVoided, createdAt(sort: Desc)])
+  @@index([departmentId])
+  @@index([isApproved, approvedAt(sort: Desc)])
 }
 
 // ----------------------------------------------------
@@ -360,4 +392,8 @@ model AuditLog {
   ipAddress  String?
   userAgent  String?
   createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt(sort: Desc)])
 }

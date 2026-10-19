@@ -261,6 +261,7 @@ export class WorkstationService {
 
     if (sampleId) {
       await this.cacheManager.del(`workstation_results_${sampleId}`);
+      await this.cacheManager.del('dashboard_stats');
       await this.prisma.sample.update({
         where: { id: sampleId },
         data: { status: SpecimenStatus.APPROVED },
