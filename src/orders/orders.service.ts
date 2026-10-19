@@ -17,6 +17,10 @@ export class OrdersService {
     status?: string;
     hn?: string;
   }) {
+    const cacheKey = `orders_list_${JSON.stringify(query || {})}`;
+    const cached = await this.cacheManager.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     const where: any = {};
     if (query?.clientSiteId) where.clientSiteId = query.clientSiteId;
     if (query?.hn) where.hn = { contains: query.hn, mode: 'insensitive' };
@@ -49,7 +53,7 @@ export class OrdersService {
       take: 200,
     });
 
-    return orders.map((o, idx) => {
+    const result = orders.map((o, idx) => {
       const firstSample = o.samples[0];
       return {
         id: o.id,
@@ -102,6 +106,22 @@ export class OrdersService {
         samplesCount: o.samples.length,
       };
     });
+
+    await this.cacheManager.set(cacheKey, result, 15000);
+    return result;
+  }
+
+  async invalidateCache() {
+    try {
+      await this.cacheManager.del('orders_list_{}');
+      const store: any = (this.cacheManager as any).store;
+      if (store && typeof store.keys === 'function') {
+        const keys = await store.keys('orders_list_*');
+        for (const k of keys) {
+          await this.cacheManager.del(k);
+        }
+      }
+    } catch {}
   }
 
   async findOne(id: string) {

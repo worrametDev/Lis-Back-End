@@ -12,6 +12,10 @@ export class WorkstationService {
   ) {}
 
   async getQueue() {
+    const cacheKey = 'workstation_queue';
+    const cached = await this.cacheManager.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     const samples = await this.prisma.sample.findMany({
       where: {
         status: { in: [SpecimenStatus.REGISTERED, SpecimenStatus.RECEIVED, SpecimenStatus.IN_PROCESS, SpecimenStatus.VERIFIED] },
@@ -29,7 +33,7 @@ export class WorkstationService {
       take: 20,
     });
 
-    return samples.map((s, idx) => {
+    const result = samples.map((s, idx) => {
       // In case an order has multiple samples / specimen types, join distinct values with a comma
       const orderSpecimenTypes = s.order?.samples && s.order.samples.length > 0
         ? Array.from(new Set(s.order.samples.map((sm) => sm.specimenType).filter(Boolean))).join(', ')
@@ -47,6 +51,9 @@ export class WorkstationService {
         status: s.status,
       };
     });
+
+    await this.cacheManager.set(cacheKey, result, 15000);
+    return result;
   }
 
   async getResults(sampleId: string) {
