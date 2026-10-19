@@ -1,19 +1,38 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import * as path from 'path';
 import * as fs from 'fs';
-
+import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
 import * as compression from 'compression';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  // 1. Enterprise Security Headers (Helmet)
+  app.use(
+    helmet({
+      contentSecurityPolicy: false, // Swagger and CDN static resources
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  // 2. Performance & Cookies
   app.use(compression());
   app.use(cookieParser());
 
+  // 3. Global Input Sanitization & Mass-assignment Protection
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }),
+  );
+
+  // 4. Strict CORS Whitelist Configuration
   const rawOrigins = process.env.CORS_ORIGIN || '';
   const allowedOrigins = rawOrigins
     ? rawOrigins.split(',').map((o) => o.trim())
@@ -21,16 +40,19 @@ async function bootstrap() {
 
   app.enableCors({
     origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
       if (!origin) return callback(null, true);
-      if (
+
+      const isAllowed =
         allowedOrigins.includes(origin) ||
         origin.includes('localhost') ||
         origin.includes('127.0.0.1') ||
-        origin.endsWith('.vercel.app')
-      ) {
+        origin.endsWith('.vercel.app');
+
+      if (isAllowed) {
         return callback(null, true);
       }
-      return callback(null, true);
+      return callback(new Error(`CORS Error: Origin '${origin}' is not authorized.`), false);
     },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,

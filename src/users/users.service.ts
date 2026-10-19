@@ -117,7 +117,8 @@ export class UsersService {
       include: { parentSite: true, clientSite: true },
     });
     if (!user) throw new NotFoundException(`User with ID ${id} not found`);
-    return user;
+    const { passwordHash, ...safeUser } = user;
+    return safeUser;
   }
 
   async create(data: {

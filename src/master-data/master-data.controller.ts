@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { MasterDataService } from './master-data.service';
+import { Public } from '../auth/public.decorator';
 
 @ApiTags('Master Data')
 @ApiBearerAuth('JWT-auth')
@@ -24,6 +25,7 @@ export class MasterDataController {
     return this.masterDataService.findAllParentSites();
   }
 
+  @Public()
   @Get('master-data/health')
   @ApiOperation({ summary: 'ตรวจเช็คสถานะการเชื่อมต่อฐานข้อมูล PostgreSQL จริง (Live DB Health Check)' })
   @ApiResponse({ status: 200, description: 'สถานะการเชื่อมต่อฐานข้อมูล' })
@@ -31,6 +33,7 @@ export class MasterDataController {
     return this.masterDataService.checkHealth();
   }
 
+  @Public()
   @Get('master-data/site-info')
   @ApiOperation({ summary: 'ดึงข้อมูลโรงพยาบาล/Site ติดตั้งของระบบ (Installation Site Info for Login & Leftbar)' })
   @ApiResponse({ status: 200, description: 'คืนค่าข้อมูลโรงพยาบาลที่ติดตั้งระบบ' })
