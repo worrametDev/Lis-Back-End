@@ -16,6 +16,10 @@ export class SamplesService {
     clientSiteId?: string;
     search?: string;
   }) {
+    const cacheKey = `samples_list_${JSON.stringify(query || {})}`;
+    const cached = await this.cacheManager.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     const where: any = {};
     if (query?.status) {
       where.status = query.status as SpecimenStatus;
@@ -55,7 +59,7 @@ export class SamplesService {
       take: 200,
     });
 
-    return samples.map((s, idx) => ({
+    const result = samples.map((s, idx) => ({
       id: s.id,
       no: idx + 1,
       status: s.status,
@@ -82,6 +86,22 @@ export class SamplesService {
       receivedAt: s.receivedAt,
       rejectedAt: s.rejectedAt,
     }));
+
+    await this.cacheManager.set(cacheKey, result, 15000);
+    return result;
+  }
+
+  async invalidateCache() {
+    try {
+      await this.cacheManager.del('samples_list_{}');
+      const store: any = (this.cacheManager as any).store;
+      if (store && typeof store.keys === 'function') {
+        const keys = await store.keys('samples_list_*');
+        for (const k of keys) {
+          await this.cacheManager.del(k);
+        }
+      }
+    } catch {}
   }
 
   async receive(data: {
