@@ -16,11 +16,19 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { Request, Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
+import { IsNotEmpty, IsString } from 'class-validator';
 import { AuthService } from './auth.service';
 import { JwtAuthService } from './jwt.service';
+import { Public } from './public.decorator';
 
 export class LoginDto {
+  @IsString()
+  @IsNotEmpty({ message: 'กรุณาระบุ Username' })
   username!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'กรุณาระบุ Password' })
   password!: string;
 }
 
@@ -32,6 +40,8 @@ export class AuthController {
     private readonly jwtService: JwtAuthService,
   ) {}
 
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('login')
   @ApiOperation({
     summary: 'เข้าสู่ระบบ (Login) และออก HttpOnly Cookie + JWT Token ตามมาตรฐานความปลอดภัยสูงสุด',
@@ -85,6 +95,7 @@ export class AuthController {
     return result;
   }
 
+  @Public()
   @Post('logout')
   @ApiOperation({ summary: 'ออกจากระบบ (Logout) และทำลาย HttpOnly Cookie' })
   @ApiResponse({ status: 200, description: 'ออกจากระบบสำเร็จ' })

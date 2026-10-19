@@ -57,8 +57,22 @@ export class UploadsController {
       throw new BadRequestException('ไม่พบไฟล์ที่ต้องการอัปโหลด');
     }
 
+    // Whitelist allowed MIME types (Prevent uploading malicious executable or script files)
+    const allowedMimeTypes = [
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/webp',
+      'image/svg+xml',
+      'application/pdf',
+    ];
+    if (!allowedMimeTypes.includes(file.mimetype.toLowerCase())) {
+      throw new BadRequestException('ประเภทไฟล์ไม่ถูกต้อง อนุญาตเฉพาะรูปภาพ (PNG, JPG, WEBP, SVG) และเอกสาร PDF เท่านั้น');
+    }
+
+    // Sanitize extension and generate cryptographically clean name
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
     const filename = `${file.fieldname}-${uniqueSuffix}${ext}`;
 
     const supabaseUrl = process.env.SUPABASE_URL;
