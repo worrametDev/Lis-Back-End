@@ -11,6 +11,31 @@ export class MasterDataService {
   ) {}
 
   // ==========================================
+  // 0. HEALTH CHECK
+  // ==========================================
+  async checkHealth() {
+    const start = Date.now();
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+      const latencyMs = Date.now() - start;
+      return {
+        status: 'CONNECTED',
+        database: 'PostgreSQL',
+        latencyMs,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (err: any) {
+      return {
+        status: 'DISCONNECTED',
+        database: 'PostgreSQL',
+        latencyMs: Date.now() - start,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  // ==========================================
   // 1. PARENT SITES
   // ==========================================
   async findAllParentSites() {
