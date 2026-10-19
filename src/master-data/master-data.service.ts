@@ -28,7 +28,7 @@ export class MasterDataService {
 
   async getSiteInfo() {
     const cached = await this.cacheManager.get<any>('master_site_info');
-    if (cached) return cached;
+    if (cached && cached.siteName && !cached.siteName.includes('?')) return cached;
 
     const primarySite = await this.prisma.parentSite.findFirst({
       where: { siteStatus: 'Active' },
@@ -38,9 +38,17 @@ export class MasterDataService {
     const envHospitalName = process.env.HOSPITAL_NAME;
     const envHospitalNameEn = process.env.HOSPITAL_NAME_EN;
 
-    const siteName = primarySite?.siteName || envHospitalName || 'โรงพยาบาลเสนา';
+    const cleanStr = (val: string | null | undefined, fallback: string) => {
+      if (!val || val.includes('?')) return fallback;
+      return val;
+    };
+
+    const siteName = cleanStr(primarySite?.siteName, envHospitalName || 'โรงพยาบาลเสนา');
     const siteCode = primarySite?.siteCode || '00940';
-    const province = primarySite?.province || 'พระนครศรีอยุธยา';
+    const province = cleanStr(primarySite?.province, 'พระนครศรีอยุธยา');
+    const district = cleanStr(primarySite?.district, 'อำเภอเสนา');
+    const subdistrict = cleanStr(primarySite?.subdistrict, 'ตำบลสามกอ');
+    const address = cleanStr(primarySite?.address, '111 หมู่ 2');
 
     let hospitalNameEn = envHospitalNameEn || '';
     if (!hospitalNameEn && siteName.includes('(') && siteName.includes(')')) {
@@ -62,10 +70,10 @@ export class MasterDataService {
       hospitalNameEn,
       displayName,
       province,
-      district: primarySite?.district || '',
-      subdistrict: primarySite?.subdistrict || '',
-      address: primarySite?.address || '',
-      zipcode: primarySite?.zipcode || '',
+      district,
+      subdistrict,
+      address,
+      zipcode: primarySite?.zipcode || '13110',
       lnPattern: primarySite?.lnPattern || 'LN-69{YY}{MM}{DD}{SEQ}',
       siteType: primarySite?.siteType || 'Parent Site',
     };
@@ -91,11 +99,17 @@ export class MasterDataService {
       orderBy: { createdAt: 'asc' },
     });
 
-    const siteName = data.siteName || primarySite?.siteName || 'โรงพยาบาลเสนา';
-    const hospitalNameEn = data.hospitalNameEn || '';
+    const cleanInput = (val: string | undefined, current: string | null | undefined, fallback: string) => {
+      if (val === undefined) return current || fallback;
+      if (val.includes('?')) return current && !current.includes('?') ? current : fallback;
+      return val;
+    };
+
+    const siteName = cleanInput(data.siteName, primarySite?.siteName, 'โรงพยาบาลเสนา');
+    const hospitalNameEn = data.hospitalNameEn || 'Sena Hospital';
 
     let displayName = data.displayName;
-    if (!displayName) {
+    if (!displayName || displayName.includes('?')) {
       if (hospitalNameEn && !siteName.includes('(')) {
         displayName = `${siteName} (${hospitalNameEn})`;
       } else {
@@ -109,10 +123,10 @@ export class MasterDataService {
         data: {
           siteCode: data.siteCode || primarySite.siteCode,
           siteName: siteName,
-          address: data.address !== undefined ? data.address : primarySite.address,
-          subdistrict: data.subdistrict !== undefined ? data.subdistrict : primarySite.subdistrict,
-          district: data.district !== undefined ? data.district : primarySite.district,
-          province: data.province !== undefined ? data.province : primarySite.province,
+          address: cleanInput(data.address, primarySite.address, '111 หมู่ 2'),
+          subdistrict: cleanInput(data.subdistrict, primarySite.subdistrict, 'ตำบลสามกอ'),
+          district: cleanInput(data.district, primarySite.district, 'อำเภอเสนา'),
+          province: cleanInput(data.province, primarySite.province, 'พระนครศรีอยุธยา'),
           zipcode: data.zipcode !== undefined ? data.zipcode : primarySite.zipcode,
           lnPattern: data.lnPattern !== undefined ? data.lnPattern : primarySite.lnPattern,
         },
