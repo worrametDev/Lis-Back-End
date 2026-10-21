@@ -86,17 +86,17 @@ async function main() {
 
   // 5. Create Sample Conditions
   const conditions = [
-    { conditionCode: 'NORMAL', conditionName: 'ปกติ (Normal)' },
-    { conditionCode: 'HEMOLYSIS', conditionName: 'เม็ดเลือดแดงแตก (Hemolysis)' },
-    { conditionCode: 'CLOT', conditionName: 'มีลิ่มเลือด (Clot)' },
-    { conditionCode: 'LIPEMIC', conditionName: 'สารไขมันสูง (Lipemic)' },
-    { conditionCode: 'VOL_INSUF', conditionName: 'ปริมาตรไม่เพียงพอ (Insufficient Volume)' },
+    { conditionCode: 'NORMAL', conditionName: 'ปกติ (Normal)', isDefault: true },
+    { conditionCode: 'HEMOLYSIS', conditionName: 'เม็ดเลือดแดงแตก (Hemolysis)', isDefault: false },
+    { conditionCode: 'CLOT', conditionName: 'มีลิ่มเลือด (Clot)', isDefault: false },
+    { conditionCode: 'LIPEMIC', conditionName: 'สารไขมันสูง (Lipemic)', isDefault: false },
+    { conditionCode: 'VOL_INSUF', conditionName: 'ปริมาตรไม่เพียงพอ (Insufficient Volume)', isDefault: false },
   ];
 
   for (const cond of conditions) {
     await prisma.sampleCondition.upsert({
       where: { conditionCode: cond.conditionCode },
-      update: {},
+      update: { isDefault: cond.isDefault },
       create: cond,
     });
   }
