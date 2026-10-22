@@ -83,6 +83,8 @@ export class SamplesService {
       urgentStatus: s.urgentStatus || s.order.urgentStatus || 'NORMAL',
       ward: s.order.ward?.wardName || s.order.patientType || 'ผู้ป่วยนอก (OPD)',
       condition: s.sampleCondition?.conditionName || 'ปกติ (Normal)',
+      specimenCondition: s.sampleCondition?.conditionName || 'ปกติ (Normal)',
+      conditionOther: s.conditionOther,
       receivedAt: s.receivedAt,
       rejectedAt: s.rejectedAt,
     }));
@@ -107,6 +109,10 @@ export class SamplesService {
   async receive(data: {
     sampleIds: string[];
     autoBarcode?: boolean;
+    sampleConditionId?: string;
+    conditionCode?: string;
+    condition?: string;
+    conditionOther?: string;
     receivedById?: string;
   }) {
     const validSampleIds = (data.sampleIds || []).filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
@@ -114,10 +120,28 @@ export class SamplesService {
       throw new BadRequestException('กรุณาระบุรายการสิ่งส่งตรวจที่ต้องการตรวจรับ');
     }
 
+    let conditionId = data.sampleConditionId;
+    if (!conditionId && (data.conditionCode || data.condition)) {
+      const target = data.conditionCode || data.condition;
+      const cond = await this.prisma.sampleCondition.findFirst({
+        where: {
+          OR: [
+            { id: target },
+            { conditionCode: target },
+            { conditionName: target },
+            { conditionName: { contains: target } },
+          ],
+        },
+      });
+      if (cond) conditionId = cond.id;
+    }
+
     const updated = await this.prisma.sample.updateMany({
       where: { id: { in: validSampleIds } },
       data: {
         status: SpecimenStatus.RECEIVED,
+        sampleConditionId: conditionId,
+        conditionOther: data.conditionOther,
         receivedAt: new Date(),
         receivedById: data.receivedById,
       },
@@ -137,6 +161,7 @@ export class SamplesService {
 
     try {
       await this.cacheManager.del('dashboard_stats');
+      await this.invalidateCache();
     } catch {}
 
     return {
@@ -153,6 +178,8 @@ export class SamplesService {
     sampleIds: string[];
     sampleConditionId?: string;
     conditionCode?: string;
+    condition?: string;
+    conditionOther?: string;
     rejectionReason?: string;
     rejectedById?: string;
   }) {
@@ -161,9 +188,17 @@ export class SamplesService {
     }
 
     let conditionId = data.sampleConditionId;
-    if (!conditionId && data.conditionCode) {
-      const cond = await this.prisma.sampleCondition.findUnique({
-        where: { conditionCode: data.conditionCode },
+    if (!conditionId && (data.conditionCode || data.condition)) {
+      const target = data.conditionCode || data.condition;
+      const cond = await this.prisma.sampleCondition.findFirst({
+        where: {
+          OR: [
+            { id: target },
+            { conditionCode: target },
+            { conditionName: target },
+            { conditionName: { contains: target } },
+          ],
+        },
       });
       if (cond) conditionId = cond.id;
     }
@@ -173,7 +208,8 @@ export class SamplesService {
       data: {
         status: SpecimenStatus.REJECTED,
         sampleConditionId: conditionId,
-        rejectionReason: data.rejectionReason,
+        conditionOther: data.conditionOther,
+        rejectionReason: data.rejectionReason || data.condition,
         rejectedAt: new Date(),
         rejectedById: data.rejectedById,
       },
@@ -181,6 +217,7 @@ export class SamplesService {
 
     try {
       await this.cacheManager.del('dashboard_stats');
+      await this.invalidateCache();
     } catch {}
 
     return {

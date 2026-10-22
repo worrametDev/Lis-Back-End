@@ -35,12 +35,26 @@ export class SamplesController {
           description: 'รายการ UUID ของ Sample ที่ต้องการตรวจรับ',
         },
         autoBarcode: { type: 'boolean', example: true, description: 'สั่งพิมพ์บาร์โค้ดอัตโนมัติ' },
+        condition: { type: 'string', example: 'ปกติ (Normal)', description: 'Specimen Condition (เช่น ปกติ, Hemolysis)' },
+        sampleConditionId: { type: 'string', description: 'ID ของ Sample Condition' },
+        conditionOther: { type: 'string', description: 'รายละเอียดสภาพสิ่งส่งตรวจอื่นๆ' },
       },
       required: ['sampleIds'],
     },
   })
   @ApiResponse({ status: 200, description: 'ตรวจรับสำเร็จ' })
-  receive(@Body() body: { sampleIds: string[]; autoBarcode?: boolean; receivedById?: string }) {
+  receive(
+    @Body()
+    body: {
+      sampleIds: string[];
+      autoBarcode?: boolean;
+      sampleConditionId?: string;
+      conditionCode?: string;
+      condition?: string;
+      conditionOther?: string;
+      receivedById?: string;
+    },
+  ) {
     return this.samplesService.receive(body);
   }
 
@@ -56,7 +70,10 @@ export class SamplesController {
           example: ['smp-uuid-1'],
           description: 'รายการ UUID ของ Sample ที่ต้องการปฏิเสธ',
         },
+        condition: { type: 'string', example: 'Hemolysis', description: 'Specimen Condition' },
         conditionCode: { type: 'string', example: 'HEMOLYSIS', description: 'รหัสสภาพสิ่งส่งตรวจ (เช่น HEMOLYSIS, CLOT)' },
+        sampleConditionId: { type: 'string', description: 'ID ของ Sample Condition' },
+        conditionOther: { type: 'string', description: 'รายละเอียดสภาพสิ่งส่งตรวจอื่นๆ' },
         rejectionReason: { type: 'string', example: 'เม็ดเลือดแดงแตกอย่างรุนแรง ไม่สามารถตรวจ CBC ได้', description: 'เหตุผลประกอบการ Reject' },
       },
       required: ['sampleIds'],
@@ -69,6 +86,8 @@ export class SamplesController {
       sampleIds: string[];
       sampleConditionId?: string;
       conditionCode?: string;
+      condition?: string;
+      conditionOther?: string;
       rejectionReason?: string;
       rejectedById?: string;
     },

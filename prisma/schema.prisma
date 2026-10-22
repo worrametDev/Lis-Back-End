@@ -135,6 +135,37 @@ model TestPanel {
   updatedAt    DateTime @updatedAt
 }
 
+model ValueList {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  status    String   @default("Active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LabTest {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  name          String
+  selectedSites Json?    // Array of site codes or ["ALL"]
+  testItems     Json?    // Array of TestSubItem objects
+  status        String   @default("Active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model TestProfile {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  name          String
+  tests         Json?    // Array of test codes
+  selectedSites Json?    // Array of site codes or ["ALL"]
+  status        String   @default("Active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 // ----------------------------------------------------
 // 2. USER & ACCESS CONTROL
 // ----------------------------------------------------
