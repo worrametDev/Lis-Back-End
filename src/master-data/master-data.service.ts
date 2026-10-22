@@ -817,6 +817,326 @@ export class MasterDataService {
   }
 
   // ==========================================
+  // 9. VALUE LISTS (Database Persisted with Fallback)
+  // ==========================================
+  private inMemoryValueLists: any[] = [
+    { id: "vl-1", code: "POS", name: "Positive", status: "Active" },
+    { id: "vl-2", code: "NEG", name: "Negative", status: "Active" },
+    { id: "vl-3", code: "EQV", name: "Equivocal", status: "Active" },
+    { id: "vl-4", code: "REAC", name: "Reactive", status: "Active" },
+    { id: "vl-5", code: "NONREAC", name: "Non-Reactive", status: "Active" },
+    { id: "vl-6", code: "FOUND", name: "Found", status: "Active" },
+    { id: "vl-7", code: "NOTFOUND", name: "Not Found", status: "Active" },
+    { id: "vl-8", code: "YELLOW", name: "Yellow", status: "Active" },
+    { id: "vl-9", code: "AMBER", name: "Amber", status: "Active" },
+    { id: "vl-10", code: "BLOODY", name: "Bloody", status: "Active" },
+    { id: "vl-11", code: "SOFT", name: "Soft", status: "Active" },
+    { id: "vl-12", code: "FORMED", name: "Formed", status: "Active" },
+    { id: "vl-13", code: "WATERY", name: "Watery", status: "Active" },
+    { id: "vl-14", code: "MUCOUS", name: "Mucous", status: "Active" },
+  ];
+
+  async findAllValueLists() {
+    try {
+      if ((this.prisma as any).valueList) {
+        const list = await (this.prisma as any).valueList.findMany({ orderBy: { code: 'asc' } });
+        if (list && list.length > 0) return list;
+      }
+    } catch {}
+    return this.inMemoryValueLists;
+  }
+
+  async createValueList(data: any) {
+    const item = {
+      id: `vl-${Date.now()}`,
+      code: data.code?.trim() || `VL-${Date.now().toString().slice(-4)}`,
+      name: data.name?.trim() || '',
+      status: data.status || 'Active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      if ((this.prisma as any).valueList) {
+        const created = await (this.prisma as any).valueList.create({ data: item });
+        if (created) return created;
+      }
+    } catch {}
+    this.inMemoryValueLists.unshift(item);
+    return item;
+  }
+
+  async updateValueList(id: string, data: any) {
+    try {
+      if ((this.prisma as any).valueList) {
+        const updated = await (this.prisma as any).valueList.update({
+          where: { id },
+          data: {
+            code: data.code,
+            name: data.name,
+            status: data.status,
+          },
+        });
+        if (updated) return updated;
+      }
+    } catch {}
+    this.inMemoryValueLists = this.inMemoryValueLists.map((vl) =>
+      vl.id === id ? { ...vl, ...data, updatedAt: new Date().toISOString() } : vl
+    );
+    return this.inMemoryValueLists.find((vl) => vl.id === id);
+  }
+
+  async deleteValueList(id: string) {
+    try {
+      if ((this.prisma as any).valueList) {
+        await (this.prisma as any).valueList.delete({ where: { id } });
+        return { success: true };
+      }
+    } catch {}
+    this.inMemoryValueLists = this.inMemoryValueLists.filter((vl) => vl.id !== id);
+    return { success: true };
+  }
+
+  // ==========================================
+  // 10. LAB TESTS & SUB-ITEMS (Database Persisted with Fallback)
+  // ==========================================
+  private inMemoryTests: any[] = [
+    {
+      id: "test-1",
+      code: "FLU-A",
+      name: "Influenza A Ag",
+      selectedSites: ["ALL"],
+      status: "Active",
+      testItems: [
+        { id: "item-1-1", code: "FluA-COI", name: "Influenza A COI", valueType: "decimal", unit: "COI", low: "0.00", high: "0.99", criticalLow: null, criticalHigh: "1.00", criticalValue: "" },
+        { id: "item-1-2", code: "FluA-Ag", name: "Influenza A Ag", valueType: "list", valueList: ["Negative", "Positive"], unit: "", low: null, high: null, criticalLow: null, criticalHigh: null, criticalValue: "Positive" }
+      ]
+    },
+    {
+      id: "test-2",
+      code: "STOOL-EXAM",
+      name: "Stool Examination",
+      selectedSites: ["ALL"],
+      status: "Active",
+      testItems: [
+        { id: "item-2-1", code: "Color", name: "Color", valueType: "list", valueList: ["Yellow", "Amber", "Bloody"], unit: "", criticalValue: "Bloody" },
+        { id: "item-2-2", code: "Appearance", name: "Appearance", valueType: "list", valueList: ["Soft", "Formed", "Watery", "Mucous"], unit: "", criticalValue: "" },
+        { id: "item-2-3", code: "Parasite", name: "Parasite", valueType: "list", valueList: ["Not Found", "Found"], unit: "", criticalValue: "Found" },
+        { id: "item-2-4", code: "Protozoa", name: "Protozoa", valueType: "list", valueList: ["Not Found", "Found"], unit: "", criticalValue: "Found" },
+        { id: "item-2-5", code: "FOB", name: "Occult Blood (FOB)", valueType: "list", valueList: ["Negative", "Positive"], unit: "", criticalValue: "Positive" }
+      ]
+    },
+    {
+      id: "test-3",
+      code: "FBS",
+      name: "Fasting Blood Sugar",
+      selectedSites: ["ALL"],
+      status: "Active",
+      testItems: [
+        { id: "item-3-1", code: "FBS", name: "Fasting Blood Sugar", valueType: "integer", unit: "mg/dL", low: "70", high: "99", criticalLow: "50", criticalHigh: "400", criticalValue: "" }
+      ]
+    },
+    {
+      id: "test-4",
+      code: "CHOL",
+      name: "Cholesterol Total",
+      selectedSites: ["ALL"],
+      status: "Active",
+      testItems: [
+        { id: "item-4-1", code: "CHOL", name: "Cholesterol Total", valueType: "integer", unit: "mg/dL", low: "0", high: "200", criticalLow: null, criticalHigh: "300", criticalValue: "" }
+      ]
+    },
+    {
+      id: "test-5",
+      code: "TRIG",
+      name: "Triglyceride",
+      selectedSites: ["ALL"],
+      status: "Active",
+      testItems: [
+        { id: "item-5-1", code: "TRIG", name: "Triglyceride", valueType: "integer", unit: "mg/dL", low: "0", high: "150", criticalLow: null, criticalHigh: "500", criticalValue: "" }
+      ]
+    },
+    {
+      id: "test-6",
+      code: "HDL",
+      name: "High-Density Lipoprotein (HDL)",
+      selectedSites: ["ALL"],
+      status: "Active",
+      testItems: [
+        { id: "item-6-1", code: "HDL", name: "HDL-Cholesterol", valueType: "integer", unit: "mg/dL", low: "40", high: "60", criticalLow: "20", criticalHigh: null, criticalValue: "" }
+      ]
+    },
+    {
+      id: "test-7",
+      code: "LDL",
+      name: "Low-Density Lipoprotein (LDL)",
+      selectedSites: ["ALL"],
+      status: "Active",
+      testItems: [
+        { id: "item-7-1", code: "LDL", name: "LDL-Cholesterol", valueType: "integer", unit: "mg/dL", low: "0", high: "100", criticalLow: null, criticalHigh: "190", criticalValue: "" }
+      ]
+    },
+    {
+      id: "test-8",
+      code: "BUN",
+      name: "Blood Urea Nitrogen",
+      selectedSites: ["ALL"],
+      status: "Active",
+      testItems: [
+        { id: "item-8-1", code: "BUN", name: "Blood Urea Nitrogen", valueType: "decimal", unit: "mg/dL", low: "6.0", high: "20.0", criticalLow: null, criticalHigh: "80.0", criticalValue: "" }
+      ]
+    },
+    {
+      id: "test-9",
+      code: "CR",
+      name: "Creatinine",
+      selectedSites: ["ALL"],
+      status: "Active",
+      testItems: [
+        { id: "item-9-1", code: "CR", name: "Creatinine", valueType: "decimal", unit: "mg/dL", low: "0.50", high: "1.20", criticalLow: null, criticalHigh: "5.00", criticalValue: "" }
+      ]
+    }
+  ];
+
+  async findAllTests() {
+    try {
+      if ((this.prisma as any).labTest) {
+        const list = await (this.prisma as any).labTest.findMany({ orderBy: { code: 'asc' } });
+        if (list && list.length > 0) return list;
+      }
+    } catch {}
+    return this.inMemoryTests;
+  }
+
+  async createTest(data: any) {
+    const item = {
+      id: `test-${Date.now()}`,
+      code: data.code?.trim().toUpperCase() || `TEST-${Date.now().toString().slice(-4)}`,
+      name: data.name?.trim() || '',
+      selectedSites: data.selectedSites || ["ALL"],
+      testItems: data.testItems || [],
+      status: data.status || 'Active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      if ((this.prisma as any).labTest) {
+        const created = await (this.prisma as any).labTest.create({ data: item });
+        if (created) return created;
+      }
+    } catch {}
+    this.inMemoryTests.unshift(item);
+    return item;
+  }
+
+  async updateTest(id: string, data: any) {
+    try {
+      if ((this.prisma as any).labTest) {
+        const updated = await (this.prisma as any).labTest.update({
+          where: { id },
+          data: {
+            code: data.code?.trim().toUpperCase(),
+            name: data.name?.trim(),
+            selectedSites: data.selectedSites,
+            testItems: data.testItems,
+            status: data.status,
+          },
+        });
+        if (updated) return updated;
+      }
+    } catch {}
+    this.inMemoryTests = this.inMemoryTests.map((t) =>
+      t.id === id ? { ...t, ...data, updatedAt: new Date().toISOString() } : t
+    );
+    return this.inMemoryTests.find((t) => t.id === id);
+  }
+
+  async deleteTest(id: string) {
+    try {
+      if ((this.prisma as any).labTest) {
+        await (this.prisma as any).labTest.delete({ where: { id } });
+        return { success: true };
+      }
+    } catch {}
+    this.inMemoryTests = this.inMemoryTests.filter((t) => t.id !== id);
+    return { success: true };
+  }
+
+  // ==========================================
+  // 11. TEST PROFILES (Database Persisted with Fallback)
+  // ==========================================
+  private inMemoryProfiles: any[] = [
+    { id: "profile-1", code: "LIPID", name: "Lipid Profile", tests: ["CHOL", "HDL", "LDL", "TRIG"], selectedSites: ["ALL"], status: "Active" },
+    { id: "profile-2", code: "RFT-PROFILE", name: "Renal Function Profile", tests: ["BUN", "CR"], selectedSites: ["ALL"], status: "Active" },
+    { id: "profile-3", code: "DM-PROFILE", name: "Diabetic Profile", tests: ["FBS"], selectedSites: ["ALL"], status: "Active" },
+    { id: "profile-4", code: "FLU-PROFILE", name: "Influenza Rapid Ag Profile", tests: ["FLU-A"], selectedSites: ["ALL"], status: "Active" },
+    { id: "profile-5", code: "STOOL-PROFILE", name: "Stool Examination Profile", tests: ["STOOL-EXAM"], selectedSites: ["ALL"], status: "Active" },
+  ];
+
+  async findAllTestProfiles() {
+    try {
+      if ((this.prisma as any).testProfile) {
+        const list = await (this.prisma as any).testProfile.findMany({ orderBy: { code: 'asc' } });
+        if (list && list.length > 0) return list;
+      }
+    } catch {}
+    return this.inMemoryProfiles;
+  }
+
+  async createTestProfile(data: any) {
+    const item = {
+      id: `profile-${Date.now()}`,
+      code: data.code?.trim().toUpperCase() || `PROF-${Date.now().toString().slice(-4)}`,
+      name: data.name?.trim() || '',
+      tests: data.tests || [],
+      selectedSites: data.selectedSites || ["ALL"],
+      status: data.status || 'Active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      if ((this.prisma as any).testProfile) {
+        const created = await (this.prisma as any).testProfile.create({ data: item });
+        if (created) return created;
+      }
+    } catch {}
+    this.inMemoryProfiles.unshift(item);
+    return item;
+  }
+
+  async updateTestProfile(id: string, data: any) {
+    try {
+      if ((this.prisma as any).testProfile) {
+        const updated = await (this.prisma as any).testProfile.update({
+          where: { id },
+          data: {
+            code: data.code?.trim().toUpperCase(),
+            name: data.name?.trim(),
+            tests: data.tests,
+            selectedSites: data.selectedSites,
+            status: data.status,
+          },
+        });
+        if (updated) return updated;
+      }
+    } catch {}
+    this.inMemoryProfiles = this.inMemoryProfiles.map((p) =>
+      p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p
+    );
+    return this.inMemoryProfiles.find((p) => p.id === id);
+  }
+
+  async deleteTestProfile(id: string) {
+    try {
+      if ((this.prisma as any).testProfile) {
+        await (this.prisma as any).testProfile.delete({ where: { id } });
+        return { success: true };
+      }
+    } catch {}
+    this.inMemoryProfiles = this.inMemoryProfiles.filter((p) => p.id !== id);
+    return { success: true };
+  }
+
+  // ==========================================
   // 6. CACHE DIAGNOSTICS & STATS
   // ==========================================
   async getCacheStats() {

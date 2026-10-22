@@ -336,5 +336,87 @@ export class MasterDataController {
   deleteTestPanel(@Param('id') id: string) {
     return this.masterDataService.deleteTestPanel(id);
   }
+
+  // ==========================================
+  // 9. VALUE LISTS
+  // ==========================================
+  @Get('value-lists')
+  @ApiOperation({ summary: 'ดึงรายการ Value List ทั้งหมด' })
+  findAllValueLists() {
+    return this.masterDataService.findAllValueLists();
+  }
+
+  @Post('value-lists')
+  @ApiOperation({ summary: 'สร้าง Value List ใหม่' })
+  createValueList(@Body() body: any) {
+    return this.masterDataService.createValueList(body);
+  }
+
+  @Put('value-lists/:id')
+  @ApiOperation({ summary: 'แก้ไข Value List' })
+  updateValueList(@Param('id') id: string, @Body() body: any) {
+    return this.masterDataService.updateValueList(id, body);
+  }
+
+  @Delete('value-lists/:id')
+  @ApiOperation({ summary: 'ลบ Value List' })
+  deleteValueList(@Param('id') id: string) {
+    return this.masterDataService.deleteValueList(id);
+  }
+
+  // ==========================================
+  // 10. TESTS (การตรวจวิเคราะห์พร้อม sub-items)
+  // ==========================================
+  @Get('tests')
+  @ApiOperation({ summary: 'ดึงรายการ Test ทั้งหมดพร้อม Sub-Items' })
+  findAllTests() {
+    return this.masterDataService.findAllTests();
+  }
+
+  @Post('tests')
+  @ApiOperation({ summary: 'สร้าง Test ใหม่พร้อม Test Items ภายใน' })
+  createTest(@Body() body: any) {
+    return this.masterDataService.createTest(body);
+  }
+
+  @Put('tests/:id')
+  @ApiOperation({ summary: 'แก้ไข Test พร้อมเรียงลำดับ Test Items' })
+  updateTest(@Param('id') id: string, @Body() body: any) {
+    return this.masterDataService.updateTest(id, body);
+  }
+
+  @Delete('tests/:id')
+  @ApiOperation({ summary: 'ลบ Test' })
+  deleteTest(@Param('id') id: string) {
+    return this.masterDataService.deleteTest(id);
+  }
+
+  // ==========================================
+  // 11. TEST PROFILES (ชุดตรวจวิเคราะห์ออกผลร่วมกัน)
+  // ==========================================
+  @Get('test-profiles')
+  @ApiOperation({ summary: 'ดึงรายการ Test Profile ทั้งหมด' })
+  findAllTestProfiles() {
+    return this.masterDataService.findAllTestProfiles();
+  }
+
+  @Post('test-profiles')
+  @ApiOperation({ summary: 'สร้าง Test Profile ใหม่' })
+  createTestProfile(@Body() body: any) {
+    return this.masterDataService.createTestProfile(body);
+  }
+
+  @Put('test-profiles/:id')
+  @ApiOperation({ summary: 'แก้ไข Test Profile' })
+  updateTestProfile(@Param('id') id: string, @Body() body: any) {
+    return this.masterDataService.updateTestProfile(id, body);
+  }
+
+  @Delete('test-profiles/:id')
+  @ApiOperation({ summary: 'ลบ Test Profile' })
+  deleteTestProfile(@Param('id') id: string) {
+    return this.masterDataService.deleteTestProfile(id);
+  }
 }
+
 
