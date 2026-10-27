@@ -412,10 +412,31 @@ export class MasterDataController {
     return this.masterDataService.updateTestProfile(id, body);
   }
 
-  @Delete('test-profiles/:id')
-  @ApiOperation({ summary: 'ลบ Test Profile' })
-  deleteTestProfile(@Param('id') id: string) {
-    return this.masterDataService.deleteTestProfile(id);
+  // ==========================================
+  // 12. ANALYZERS (เครื่องตรวจวิเคราะห์อัตโนมัติ)
+  // ==========================================
+  @Get('analyzers')
+  @ApiOperation({ summary: 'ดึงรายการเครื่องตรวจวิเคราะห์ (Analyzers) ทั้งหมดพร้อม Order Codes & Result Codes' })
+  findAllAnalyzers() {
+    return this.masterDataService.findAllAnalyzers();
+  }
+
+  @Post('analyzers')
+  @ApiOperation({ summary: 'สร้างเครื่องตรวจวิเคราะห์ใหม่พร้อม Order Codes & Result Codes' })
+  createAnalyzer(@Body() body: any) {
+    return this.masterDataService.createAnalyzer(body);
+  }
+
+  @Put('analyzers/:id')
+  @ApiOperation({ summary: 'แก้ไขเครื่องตรวจวิเคราะห์' })
+  updateAnalyzer(@Param('id') id: string, @Body() body: any) {
+    return this.masterDataService.updateAnalyzer(id, body);
+  }
+
+  @Delete('analyzers/:id')
+  @ApiOperation({ summary: 'ลบเครื่องตรวจวิเคราะห์' })
+  deleteAnalyzer(@Param('id') id: string) {
+    return this.masterDataService.deleteAnalyzer(id);
   }
 }
 

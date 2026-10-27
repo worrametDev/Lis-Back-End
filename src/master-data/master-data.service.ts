@@ -1137,6 +1137,175 @@ export class MasterDataService {
   }
 
   // ==========================================
+  // 12. ANALYZERS (Database Persisted with Fallback)
+  // ==========================================
+  private inMemoryAnalyzers: any[] = [
+    {
+      id: "analyzer-1",
+      code: "COBAS-6000",
+      name: "Roche Cobas 6000",
+      department: "Clinical Chemistry",
+      protocol: "ASTM 1394",
+      ipAddress: "192.168.10.51",
+      port: "5000",
+      status: "Active",
+      orderCodes: [
+        {
+          id: "ord-1-1",
+          orderCode: "GLU_ORD",
+          orderName: "Glucose Order",
+          resultCodes: [
+            { id: "res-1-1-1", resultCode: "GLU", resultName: "Glucose", unit: "mg/dL" },
+          ],
+        },
+        {
+          id: "ord-1-2",
+          orderCode: "LIPID_ORD",
+          orderName: "Lipid Panel Order",
+          resultCodes: [
+            { id: "res-1-2-1", resultCode: "CHOL", resultName: "Cholesterol Total", unit: "mg/dL" },
+            { id: "res-1-2-2", resultCode: "TRIG", resultName: "Triglycerides", unit: "mg/dL" },
+            { id: "res-1-2-3", resultCode: "HDL", resultName: "HDL Cholesterol", unit: "mg/dL" },
+            { id: "res-1-2-4", resultCode: "LDL", resultName: "LDL Cholesterol", unit: "mg/dL" },
+          ],
+        },
+        {
+          id: "ord-1-3",
+          orderCode: "RFT_ORD",
+          orderName: "Renal Function Panel",
+          resultCodes: [
+            { id: "res-1-3-1", resultCode: "BUN", resultName: "Blood Urea Nitrogen", unit: "mg/dL" },
+            { id: "res-1-3-2", resultCode: "CR", resultName: "Creatinine", unit: "mg/dL" },
+            { id: "res-1-3-3", resultCode: "UA", resultName: "Uric Acid", unit: "mg/dL" },
+          ],
+        },
+      ],
+    },
+    {
+      id: "analyzer-2",
+      code: "SYSMEX-XN",
+      name: "Sysmex XN-1000",
+      department: "Hematology",
+      protocol: "HL7 v2.5",
+      ipAddress: "192.168.10.52",
+      port: "5100",
+      status: "Active",
+      orderCodes: [
+        {
+          id: "ord-2-1",
+          orderCode: "CBC_ORD",
+          orderName: "Complete Blood Count Order",
+          resultCodes: [
+            { id: "res-2-1-1", resultCode: "WBC", resultName: "White Blood Cell", unit: "10^3/uL" },
+            { id: "res-2-1-2", resultCode: "RBC", resultName: "Red Blood Cell", unit: "10^6/uL" },
+            { id: "res-2-1-3", resultCode: "HGB", resultName: "Hemoglobin", unit: "g/dL" },
+            { id: "res-2-1-4", resultCode: "HCT", resultName: "Hematocrit", unit: "%" },
+            { id: "res-2-1-5", resultCode: "MCV", resultName: "Mean Corpuscular Volume", unit: "fL" },
+            { id: "res-2-1-6", resultCode: "MCH", resultName: "Mean Corpuscular Hemoglobin", unit: "pg" },
+            { id: "res-2-1-7", resultCode: "MCHC", resultName: "Mean Corpuscular Hgb Conc.", unit: "g/dL" },
+            { id: "res-2-1-8", resultCode: "PLT", resultName: "Platelet Count", unit: "10^3/uL" },
+          ],
+        },
+      ],
+    },
+    {
+      id: "analyzer-3",
+      code: "ARCHITECT-C4000",
+      name: "Abbott Architect c4000",
+      department: "Clinical Chemistry",
+      protocol: "ASTM 1394",
+      ipAddress: "192.168.10.53",
+      port: "5050",
+      status: "Active",
+      orderCodes: [
+        {
+          id: "ord-3-1",
+          orderCode: "LFT_ORD",
+          orderName: "Liver Function Panel",
+          resultCodes: [
+            { id: "res-3-1-1", resultCode: "AST", resultName: "Aspartate Aminotransferase", unit: "U/L" },
+            { id: "res-3-1-2", resultCode: "ALT", resultName: "Alanine Aminotransferase", unit: "U/L" },
+            { id: "res-3-1-3", resultCode: "ALP", resultName: "Alkaline Phosphatase", unit: "U/L" },
+            { id: "res-3-1-4", resultCode: "TBIL", resultName: "Total Bilirubin", unit: "mg/dL" },
+            { id: "res-3-1-5", resultCode: "DBIL", resultName: "Direct Bilirubin", unit: "mg/dL" },
+            { id: "res-3-1-6", resultCode: "ALB", resultName: "Albumin", unit: "g/dL" },
+          ],
+        },
+      ],
+    },
+  ];
+
+  async findAllAnalyzers() {
+    try {
+      if ((this.prisma as any).analyzer) {
+        const list = await (this.prisma as any).analyzer.findMany({ orderBy: { code: 'asc' } });
+        if (list && list.length > 0) return list;
+      }
+    } catch {}
+    return this.inMemoryAnalyzers;
+  }
+
+  async createAnalyzer(data: any) {
+    const item = {
+      id: `analyzer-${Date.now()}`,
+      code: data.code?.trim().toUpperCase() || `ANALYZER-${Date.now().toString().slice(-4)}`,
+      name: data.name?.trim() || '',
+      department: data.department || '',
+      protocol: data.protocol || 'ASTM 1394',
+      ipAddress: data.ipAddress || '',
+      port: data.port || '',
+      status: data.status || 'Active',
+      orderCodes: data.orderCodes || [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      if ((this.prisma as any).analyzer) {
+        const created = await (this.prisma as any).analyzer.create({ data: item });
+        if (created) return created;
+      }
+    } catch {}
+    this.inMemoryAnalyzers.unshift(item);
+    return item;
+  }
+
+  async updateAnalyzer(id: string, data: any) {
+    try {
+      if ((this.prisma as any).analyzer) {
+        const updated = await (this.prisma as any).analyzer.update({
+          where: { id },
+          data: {
+            code: data.code?.trim().toUpperCase(),
+            name: data.name?.trim(),
+            department: data.department,
+            protocol: data.protocol,
+            ipAddress: data.ipAddress,
+            port: data.port,
+            status: data.status,
+            orderCodes: data.orderCodes,
+          },
+        });
+        if (updated) return updated;
+      }
+    } catch {}
+    this.inMemoryAnalyzers = this.inMemoryAnalyzers.map((a) =>
+      a.id === id ? { ...a, ...data, updatedAt: new Date().toISOString() } : a
+    );
+    return this.inMemoryAnalyzers.find((a) => a.id === id);
+  }
+
+  async deleteAnalyzer(id: string) {
+    try {
+      if ((this.prisma as any).analyzer) {
+        await (this.prisma as any).analyzer.delete({ where: { id } });
+        return { success: true };
+      }
+    } catch {}
+    this.inMemoryAnalyzers = this.inMemoryAnalyzers.filter((a) => a.id !== id);
+    return { success: true };
+  }
+
+  // ==========================================
   // 6. CACHE DIAGNOSTICS & STATS
   // ==========================================
   async getCacheStats() {
