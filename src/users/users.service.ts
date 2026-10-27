@@ -57,6 +57,7 @@ export class UsersService {
     return users.map((u) => ({
       id: u.id,
       status: u.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
+      userStatus: u.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
       username: u.username,
       fullname: `${u.firstName} ${u.lastName}`.trim(),
       firstName: u.firstName,
@@ -66,9 +67,16 @@ export class UsersService {
       position: u.position || '',
       organization: u.organization || '',
       userRole: u.userRole.replace(/_/g, ' '),
+      role: u.userRole.replace(/_/g, ' '),
       clientSite: u.clientSite?.siteName || u.parentSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      clientSiteId: u.clientSiteId || '',
       parentSite: u.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSiteId: u.parentSiteId || '',
+      province: u.province || '',
+      healthRegion: u.healthRegion || '',
+      signatureUrl: u.signatureUrl || '',
       licenseNo: u.licenseNo || '',
+      license: u.licenseNo || '',
       createdAt: u.createdAt,
     }));
   }
@@ -79,12 +87,12 @@ export class UsersService {
 
     const parentSites = await this.prisma.parentSite.findMany({
       where: { siteStatus: 'Active' },
-      select: { id: true, siteCode: true, siteName: true, siteType: true },
+      select: { id: true, siteCode: true, siteName: true, siteType: true, province: true },
       orderBy: { siteName: 'asc' },
     });
     const clientSites = await this.prisma.clientSite.findMany({
       where: { siteStatus: 'Active' },
-      select: { id: true, siteCode: true, siteName: true, siteType: true, parentSiteId: true },
+      select: { id: true, siteCode: true, siteName: true, siteType: true, parentSiteId: true, province: true },
       orderBy: { siteName: 'asc' },
     });
 
@@ -118,22 +126,38 @@ export class UsersService {
     });
     if (!user) throw new NotFoundException(`User with ID ${id} not found`);
     const { passwordHash, ...safeUser } = user;
-    return safeUser;
+    return {
+      ...safeUser,
+      fullname: `${user.firstName} ${user.lastName}`.trim(),
+      role: user.userRole.replace(/_/g, ' '),
+      status: user.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
+      clientSite: user.clientSite?.siteName || user.parentSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      parentSite: user.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      license: user.licenseNo || '',
+    };
   }
 
   async create(data: {
     username: string;
     password?: string;
     firstName: string;
-    lastName: string;
+    lastName?: string;
     email?: string;
     telNo?: string;
     position?: string;
     organization?: string;
     role?: string;
+    userRole?: string;
     userStatus?: string;
+    status?: string;
     siteName?: string;
+    clientSite?: string;
+    parentSite?: string;
+    license?: string;
     licenseNo?: string;
+    province?: string;
+    healthRegion?: string;
+    signatureUrl?: string;
     parentSiteId?: string;
     clientSiteId?: string;
   }) {
@@ -149,26 +173,40 @@ export class UsersService {
     }
 
     const passwordHash = bcrypt.hashSync(data.password || 'Admin@1234', 10);
-    const userRole = this.mapRole(data.role);
-    const userStatus = this.mapStatus(data.userStatus);
+    const userRole = this.mapRole(data.role || data.userRole);
+    const userStatus = this.mapStatus(data.userStatus || data.status);
 
     // Find parent site / client site by siteName or default
     let parentSiteId = data.parentSiteId;
     let clientSiteId = data.clientSiteId;
 
-    if (!parentSiteId && !clientSiteId && data.siteName) {
+    const targetSite = data.clientSite || data.siteName;
+    if (!clientSiteId && targetSite) {
       const foundClient = await this.prisma.clientSite.findFirst({
-        where: { siteName: { contains: data.siteName, mode: 'insensitive' } },
+        where: {
+          OR: [
+            { siteName: { contains: targetSite, mode: 'insensitive' } },
+            { siteCode: { equals: targetSite, mode: 'insensitive' } },
+          ],
+        },
       });
       if (foundClient) {
         clientSiteId = foundClient.id;
-        parentSiteId = foundClient.parentSiteId;
-      } else {
-        const foundParent = await this.prisma.parentSite.findFirst({
-          where: { siteName: { contains: data.siteName, mode: 'insensitive' } },
-        });
-        if (foundParent) parentSiteId = foundParent.id;
+        if (!parentSiteId) parentSiteId = foundClient.parentSiteId;
       }
+    }
+
+    if (!parentSiteId && (data.parentSite || data.siteName)) {
+      const targetParent = data.parentSite || data.siteName;
+      const foundParent = await this.prisma.parentSite.findFirst({
+        where: {
+          OR: [
+            { siteName: { contains: targetParent, mode: 'insensitive' } },
+            { siteCode: { equals: targetParent, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (foundParent) parentSiteId = foundParent.id;
     }
 
     const newUser = await this.prisma.user.create({
@@ -183,7 +221,10 @@ export class UsersService {
         organization: data.organization,
         userRole,
         userStatus,
-        licenseNo: data.licenseNo,
+        licenseNo: data.licenseNo || data.license,
+        province: data.province,
+        healthRegion: data.healthRegion,
+        signatureUrl: data.signatureUrl,
         parentSiteId,
         clientSiteId,
       },
@@ -193,49 +234,96 @@ export class UsersService {
       },
     });
 
+    try {
+      await this.cacheManager.del('user_options');
+    } catch {}
+
     return {
       id: newUser.id,
       status: newUser.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
+      userStatus: newUser.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
       username: newUser.username,
       fullname: `${newUser.firstName} ${newUser.lastName}`.trim(),
+      firstName: newUser.firstName,
+      lastName: newUser.lastName,
+      email: newUser.email || '',
+      telNo: newUser.telNo || '',
+      position: newUser.position || '',
+      organization: newUser.organization || '',
       userRole: newUser.userRole.replace(/_/g, ' '),
+      role: newUser.userRole.replace(/_/g, ' '),
       clientSite: newUser.clientSite?.siteName || newUser.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      clientSiteId: newUser.clientSiteId || '',
       parentSite: newUser.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSiteId: newUser.parentSiteId || '',
+      province: newUser.province || '',
+      healthRegion: newUser.healthRegion || '',
+      signatureUrl: newUser.signatureUrl || '',
+      licenseNo: newUser.licenseNo || '',
+      license: newUser.licenseNo || '',
+      createdAt: newUser.createdAt,
     };
   }
 
   async update(id: string, data: any) {
     await this.findOne(id);
     const updateData: any = { ...data };
+
     if (updateData.password) {
       updateData.passwordHash = bcrypt.hashSync(updateData.password, 10);
       delete updateData.password;
     }
-    if (updateData.role) {
-      updateData.userRole = this.mapRole(updateData.role);
+    if (updateData.role || updateData.userRole) {
+      updateData.userRole = this.mapRole(updateData.role || updateData.userRole);
       delete updateData.role;
     }
-    if (updateData.userStatus) {
-      updateData.userStatus = this.mapStatus(updateData.userStatus);
+    if (updateData.userStatus || updateData.status) {
+      updateData.userStatus = this.mapStatus(updateData.userStatus || updateData.status);
+      delete updateData.status;
     }
-    if (updateData.siteName) {
+    if (updateData.license) {
+      updateData.licenseNo = updateData.license;
+      delete updateData.license;
+    }
+
+    // Resolve clientSite & parentSite by name or code if provided
+    const clientTarget = updateData.clientSite || updateData.siteName;
+    if (clientTarget && !updateData.clientSiteId) {
       const foundClient = await this.prisma.clientSite.findFirst({
-        where: { siteName: { contains: updateData.siteName, mode: 'insensitive' } },
+        where: {
+          OR: [
+            { siteName: { contains: clientTarget, mode: 'insensitive' } },
+            { siteCode: { equals: clientTarget, mode: 'insensitive' } },
+          ],
+        },
       });
       if (foundClient) {
         updateData.clientSiteId = foundClient.id;
-        updateData.parentSiteId = foundClient.parentSiteId;
-      } else {
-        const foundParent = await this.prisma.parentSite.findFirst({
-          where: { siteName: { contains: updateData.siteName, mode: 'insensitive' } },
-        });
-        if (foundParent) {
-          updateData.parentSiteId = foundParent.id;
-          updateData.clientSiteId = null;
-        }
+        if (!updateData.parentSiteId) updateData.parentSiteId = foundClient.parentSiteId;
       }
-      delete updateData.siteName;
     }
+
+    const parentTarget = updateData.parentSite || updateData.siteName;
+    if (parentTarget && !updateData.parentSiteId) {
+      const foundParent = await this.prisma.parentSite.findFirst({
+        where: {
+          OR: [
+            { siteName: { contains: parentTarget, mode: 'insensitive' } },
+            { siteCode: { equals: parentTarget, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (foundParent) {
+        updateData.parentSiteId = foundParent.id;
+      }
+    }
+
+    // Clean non-Prisma fields
+    delete updateData.siteName;
+    delete updateData.clientSite;
+    delete updateData.parentSite;
+    delete updateData.fullname;
+    delete updateData.confirmPassword;
 
     const updated = await this.prisma.user.update({
       where: { id },
@@ -243,9 +331,14 @@ export class UsersService {
       include: { parentSite: true, clientSite: true },
     });
 
+    try {
+      await this.cacheManager.del('user_options');
+    } catch {}
+
     return {
       id: updated.id,
       status: updated.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
+      userStatus: updated.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
       username: updated.username,
       fullname: `${updated.firstName} ${updated.lastName}`.trim(),
       firstName: updated.firstName,
@@ -255,17 +348,29 @@ export class UsersService {
       position: updated.position || '',
       organization: updated.organization || '',
       userRole: updated.userRole.replace(/_/g, ' '),
+      role: updated.userRole.replace(/_/g, ' '),
       clientSite: updated.clientSite?.siteName || updated.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      clientSiteId: updated.clientSiteId || '',
       parentSite: updated.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSiteId: updated.parentSiteId || '',
+      province: updated.province || '',
+      healthRegion: updated.healthRegion || '',
+      signatureUrl: updated.signatureUrl || '',
+      licenseNo: updated.licenseNo || '',
+      license: updated.licenseNo || '',
       createdAt: updated.createdAt,
     };
   }
 
   async remove(id: string) {
     await this.findOne(id);
-    return this.prisma.user.update({
+    const res = await this.prisma.user.update({
       where: { id },
       data: { userStatus: UserStatus.INACTIVE },
     });
+    try {
+      await this.cacheManager.del('user_options');
+    } catch {}
+    return res;
   }
 }

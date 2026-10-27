@@ -66,8 +66,13 @@ export class AuthService {
         role: user.userRole,
         status: user.userStatus,
         parentSite: user.parentSite?.siteName || defaultParent,
+        parentSiteId: user.parentSiteId || '',
         clientSite: user.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
-        licenseNo: user.licenseNo,
+        clientSiteId: user.clientSiteId || '',
+        licenseNo: user.licenseNo || '',
+        province: user.province || '',
+        healthRegion: user.healthRegion || '',
+        signatureUrl: user.signatureUrl || '',
       },
     };
   }
@@ -91,7 +96,13 @@ export class AuthService {
       role: user.userRole,
       status: user.userStatus,
       parentSite: user.parentSite?.siteName || defaultParent,
+      parentSiteId: user.parentSiteId || '',
       clientSite: user.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      clientSiteId: user.clientSiteId || '',
+      licenseNo: user.licenseNo || '',
+      province: user.province || '',
+      healthRegion: user.healthRegion || '',
+      signatureUrl: user.signatureUrl || '',
     };
   }
 }

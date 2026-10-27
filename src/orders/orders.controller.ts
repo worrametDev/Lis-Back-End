@@ -14,14 +14,18 @@ export class OrdersController {
   @ApiQuery({ name: 'clientSiteId', required: false, description: 'กรองตาม Client Site ID' })
   @ApiQuery({ name: 'status', required: false, description: 'กรองตามสถานะคำสั่งตรวจ (REGISTERED, RECEIVED, COMPLETED, CANCELLED)' })
   @ApiQuery({ name: 'hn', required: false, description: 'กรองตามเลขที่โรงพยาบาล (HN)' })
+  @ApiQuery({ name: 'createdFrom', required: false, description: 'กรองตั้งแต่วันที่สร้าง (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'createdTo', required: false, description: 'กรองถึงวันที่สร้าง (YYYY-MM-DD)' })
   @ApiResponse({ status: 200, description: 'คืนค่ารายการคำสั่งตรวจ' })
   findAll(
     @Query('search') search?: string,
     @Query('clientSiteId') clientSiteId?: string,
     @Query('status') status?: string,
     @Query('hn') hn?: string,
+    @Query('createdFrom') createdFrom?: string,
+    @Query('createdTo') createdTo?: string,
   ) {
-    return this.ordersService.findAll({ search, clientSiteId, status, hn });
+    return this.ordersService.findAll({ search, clientSiteId, status, hn, createdFrom, createdTo });
   }
 
   @Get(':id')

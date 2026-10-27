@@ -166,6 +166,20 @@ model TestProfile {
   updatedAt     DateTime @updatedAt
 }
 
+model Analyzer {
+  id          String   @id @default(uuid())
+  code        String   @unique // e.g. "COBAS-6000", "SYSMEX-XN"
+  name        String   // e.g. "Roche Cobas 6000"
+  department  String?  // e.g. "Clinical Chemistry", "Hematology"
+  protocol    String?  // ASTM 1394, HL7 v2.5, TCP/IP
+  ipAddress   String?  // e.g. "192.168.10.51"
+  port        String?  // e.g. "5000"
+  status      String   @default("Active")
+  orderCodes  Json?    // Array of AnalyzerOrderCodeItem (orderCode, orderName, resultCodes: [ { resultCode, resultName, unit } ])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // ----------------------------------------------------
 // 2. USER & ACCESS CONTROL
 // ----------------------------------------------------

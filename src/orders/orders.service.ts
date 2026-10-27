@@ -16,6 +16,8 @@ export class OrdersService {
     clientSiteId?: string;
     status?: string;
     hn?: string;
+    createdFrom?: string;
+    createdTo?: string;
   }) {
     const cacheKey = `orders_list_${JSON.stringify(query || {})}`;
     const cached = await this.cacheManager.get<any[]>(cacheKey);
@@ -31,6 +33,17 @@ export class OrdersService {
         { patientName: { contains: query.search, mode: 'insensitive' } },
         { samples: { some: { labNumber: { contains: query.search, mode: 'insensitive' } } } },
       ];
+    }
+    if (query?.createdFrom || query?.createdTo) {
+      where.createdAt = {};
+      if (query.createdFrom) {
+        where.createdAt.gte = new Date(query.createdFrom);
+      }
+      if (query.createdTo) {
+        const toDate = new Date(query.createdTo);
+        toDate.setHours(23, 59, 59, 999);
+        where.createdAt.lte = toDate;
+      }
     }
 
     const orders = await this.prisma.order.findMany({
@@ -229,11 +242,6 @@ export class OrdersService {
       if (matchedWard) wardId = matchedWard.id;
     }
 
-    // Generate unique Lab Number
-    const datePrefix = '69' + new Date().toISOString().slice(2, 4); // e.g. 6926
-    const randomSuffix = Math.floor(10000 + Math.random() * 90000);
-    const labNumber = `${datePrefix}${randomSuffix}`;
-
     const profileTestName =
       data.testProfile ||
       data.testPanel ||
@@ -241,7 +249,21 @@ export class OrdersService {
       (Array.isArray(data.orderItems) && data.orderItems[0]?.testName) ||
       'Complete Blood Count (CBC)';
 
-    // Create Order with Sample in transaction
+    const rawOrderItems =
+      Array.isArray(data.orderItems) && data.orderItems.length > 0
+        ? data.orderItems
+        : [
+            {
+              no: 1,
+              testCode: data.testProfile || data.testPanel || data.selectedTests?.[0] || 'CBC',
+              testName: profileTestName,
+              specimenType: data.specimenType || 'EDTA Blood',
+              department: 'Hematology',
+              status: 'Registered',
+            },
+          ];
+
+    // Create Order in transaction
     const order = await this.prisma.order.create({
       data: {
         hn: data.hn,
@@ -269,47 +291,84 @@ export class OrdersService {
         testPanel: data.testPanel,
         testProfile: data.testProfile,
         testItem: data.testItem,
-        orderItems: data.orderItems || [],
+        orderItems: rawOrderItems,
         clientSiteId: clientSite.id,
         parentSiteId,
         wardId,
         status: OrderStatus.REGISTERED,
-        samples: {
-          create: {
-            labNumber,
-            specimenType: data.specimenType || 'EDTA Blood',
-            profileTestName,
-            urgentStatus: data.urgentStatus || 'NORMAL',
-            barcode: labNumber,
-            status: SpecimenStatus.REGISTERED,
-          },
-        },
       },
       include: {
-        samples: true,
         clientSite: true,
         parentSite: true,
         ward: true,
       },
     });
 
-    const createdSample = order.samples[0];
+    const datePrefix = '69' + new Date().toISOString().slice(2, 4); // e.g. 6926
+    const randomBase = Math.floor(10000 + Math.random() * 80000);
 
-    // Create Test Results for hematology/chemistry
     const defaultDept =
       (await this.prisma.department.findFirst({
         where: { departmentCode: 'HEM' },
       })) || (await this.prisma.department.findFirst());
 
-    if (defaultDept && createdSample) {
-      if (Array.isArray(data.orderItems) && data.orderItems.length > 0) {
-        for (const item of data.orderItems) {
+    const createdSamples: any[] = [];
+    for (let i = 0; i < rawOrderItems.length; i++) {
+      const item = rawOrderItems[i];
+      const itemLabNumber = `${datePrefix}${randomBase + i}`;
+      const itemSpecimen = item.specimenType || data.specimenType || 'EDTA Blood';
+      const itemTestName = item.testName || item.testCode || profileTestName;
+
+      const sample = await this.prisma.sample.create({
+        data: {
+          orderId: order.id,
+          labNumber: itemLabNumber,
+          specimenType: itemSpecimen,
+          profileTestName: itemTestName,
+          urgentStatus: data.urgentStatus || 'NORMAL',
+          barcode: itemLabNumber,
+          status: SpecimenStatus.REGISTERED,
+        },
+      });
+      createdSamples.push(sample);
+
+      // Create test result(s) for this sample
+      if (defaultDept) {
+        if (
+          item.testCode === 'CBC' ||
+          itemTestName.includes('CBC') ||
+          itemTestName.includes('Complete Blood Count')
+        ) {
+          const cbcSubTests = [
+            { testPanel: 'CBC', testName: 'WBC Count', unit: '10^3 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
+            { testPanel: 'CBC', testName: 'RBC Count', unit: '10^6 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
+            { testPanel: 'CBC', testName: 'Hemoglobin', unit: 'g/dL', referenceRange: '12.00 - 16.00', testResult: '14.2', flag: ResultFlag.NORMAL, lastResult: '13.8', repeatResult: '14.1' },
+            { testPanel: 'CBC', testName: 'Hematocrit', unit: '%', referenceRange: '36.0 - 48.0', testResult: '42.5', flag: ResultFlag.NORMAL, lastResult: '41.0', repeatResult: '42.3' },
+            { testPanel: 'CBC', testName: 'Platelet Count', unit: '10^3 cell/ul', referenceRange: '140 - 400', testResult: '285', flag: ResultFlag.NORMAL, lastResult: '270', repeatResult: '280' },
+          ];
+          for (const sub of cbcSubTests) {
+            await this.prisma.testResult.create({
+              data: {
+                sampleId: sample.id,
+                departmentId: defaultDept.id,
+                testPanel: sub.testPanel,
+                testName: sub.testName,
+                unit: sub.unit,
+                referenceRange: sub.referenceRange,
+                testResult: sub.testResult,
+                flag: sub.flag,
+                lastResult: sub.lastResult,
+                repeatResult: sub.repeatResult,
+              },
+            });
+          }
+        } else {
           await this.prisma.testResult.create({
             data: {
-              sampleId: createdSample.id,
+              sampleId: sample.id,
               departmentId: defaultDept.id,
-              testPanel: item.testCode || 'CBC',
-              testName: item.testName || 'Test Item',
+              testPanel: item.testCode || 'GEN',
+              testName: itemTestName,
               unit: item.unit || '-',
               referenceRange: item.referenceRange || '-',
               testResult: item.testResult || null,
@@ -319,38 +378,17 @@ export class OrdersService {
             },
           });
         }
-      } else {
-        const testsToCreate = [
-          { testPanel: 'CBC', testName: 'WBC Count', unit: '10^3 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
-          { testPanel: 'CBC', testName: 'RBC Count', unit: '10^6 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
-          { testPanel: 'CBC', testName: 'Hemoglobin', unit: 'g/dL', referenceRange: '12.00 - 16.00', testResult: '14.2', flag: ResultFlag.NORMAL, lastResult: '13.8', repeatResult: '14.1' },
-          { testPanel: 'CBC', testName: 'Hematocrit', unit: '%', referenceRange: '36.0 - 48.0', testResult: '42.5', flag: ResultFlag.NORMAL, lastResult: '41.0', repeatResult: '42.3' },
-          { testPanel: 'CBC', testName: 'Platelet Count', unit: '10^3 cell/ul', referenceRange: '140 - 400', testResult: '285', flag: ResultFlag.NORMAL, lastResult: '270', repeatResult: '280' },
-        ];
-
-        for (const t of testsToCreate) {
-          await this.prisma.testResult.create({
-            data: {
-              sampleId: createdSample.id,
-              departmentId: defaultDept.id,
-              testPanel: t.testPanel,
-              testName: t.testName,
-              unit: t.unit,
-              referenceRange: t.referenceRange,
-              testResult: t.testResult,
-              flag: t.flag,
-              lastResult: t.lastResult,
-              repeatResult: t.repeatResult,
-            },
-          });
-        }
       }
     }
 
     try {
       await this.cacheManager.del('dashboard_stats');
+      await this.cacheManager.del('samples_list_{}');
+      await this.cacheManager.del('workstation_queue');
+      await this.invalidateCache();
     } catch {}
 
+    const firstSample = createdSamples[0];
     return {
       id: order.id,
       no: 1,
@@ -360,13 +398,15 @@ export class OrdersService {
       clientSite: order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
       clientSiteId: order.clientSiteId,
       hn: order.hn,
-      labNo: labNumber,
-      sampleId: createdSample?.id,
+      labNo: firstSample?.labNumber || `${datePrefix}${randomBase}`,
+      sampleId: firstSample?.id,
       patientName: order.patientName,
-      specimenType: data.specimenType || 'EDTA Blood',
-      testName: profileTestName,
+      specimenType: firstSample?.specimenType || data.specimenType || 'EDTA Blood',
+      testName: firstSample?.profileTestName || profileTestName,
       ward: order.ward?.wardName || order.patientType || 'OPD',
       urgentStatus: order.urgentStatus || 'NORMAL',
+      orderItems: rawOrderItems,
+      samples: createdSamples,
     };
   }
 

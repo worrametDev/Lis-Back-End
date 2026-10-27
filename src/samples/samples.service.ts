@@ -15,6 +15,10 @@ export class SamplesService {
     status?: string;
     clientSiteId?: string;
     search?: string;
+    createdFrom?: string;
+    createdTo?: string;
+    receivedFrom?: string;
+    receivedTo?: string;
   }) {
     const cacheKey = `samples_list_${JSON.stringify(query || {})}`;
     const cached = await this.cacheManager.get<any[]>(cacheKey);
@@ -34,6 +38,24 @@ export class SamplesService {
         { order: { hn: { contains: query.search, mode: 'insensitive' } } },
         { order: { patientName: { contains: query.search, mode: 'insensitive' } } },
       ];
+    }
+    if (query?.createdFrom || query?.createdTo) {
+      where.createdAt = {};
+      if (query.createdFrom) where.createdAt.gte = new Date(query.createdFrom);
+      if (query.createdTo) {
+        const toDate = new Date(query.createdTo);
+        toDate.setHours(23, 59, 59, 999);
+        where.createdAt.lte = toDate;
+      }
+    }
+    if (query?.receivedFrom || query?.receivedTo) {
+      where.receivedAt = {};
+      if (query.receivedFrom) where.receivedAt.gte = new Date(query.receivedFrom);
+      if (query.receivedTo) {
+        const toDate = new Date(query.receivedTo);
+        toDate.setHours(23, 59, 59, 999);
+        where.receivedAt.lte = toDate;
+      }
     }
 
     const samples = await this.prisma.sample.findMany({
@@ -224,6 +246,38 @@ export class SamplesService {
       success: true,
       rejectedCount: updated.count,
       message: `ปฏิเสธสิ่งส่งตรวจเรียบร้อยแล้ว ${updated.count} รายการ`,
+    };
+  }
+
+  async reset(sampleIds: string[]) {
+    const validSampleIds = (sampleIds || []).filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+    if (validSampleIds.length === 0) {
+      throw new BadRequestException('กรุณาระบุรายการสิ่งส่งตรวจที่ต้องการรีเซ็ต');
+    }
+
+    const updated = await this.prisma.sample.updateMany({
+      where: { id: { in: validSampleIds } },
+      data: {
+        status: SpecimenStatus.REGISTERED,
+        sampleConditionId: null,
+        conditionOther: null,
+        receivedAt: null,
+        receivedById: null,
+        rejectedAt: null,
+        rejectedById: null,
+        rejectionReason: null,
+      },
+    });
+
+    try {
+      await this.cacheManager.del('dashboard_stats');
+      await this.invalidateCache();
+    } catch {}
+
+    return {
+      success: true,
+      resetCount: updated.count,
+      message: `รีเซ็ตสถานะสิ่งส่งตรวจเป็น Registered แล้ว ${updated.count} รายการ`,
     };
   }
 }
