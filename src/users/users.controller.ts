@@ -69,6 +69,16 @@ export class UsersController {
     return this.usersService.update(id, body);
   }
 
+  @Put(':id/telemedicine-access')
+  @ApiOperation({ summary: 'กำหนดสิทธิการเข้าใช้งาน Telemedicine และบทบาท (Doctor, Nurse, Staff, Admin)' })
+  @ApiParam({ name: 'id', description: 'User ID' })
+  async updateTelemedicineAccess(
+    @Param('id') id: string,
+    @Body() body: { telemedicineAccess: boolean; telemedicineRole?: string },
+  ) {
+    return this.usersService.updateTelemedicineAccess(id, body.telemedicineAccess, body.telemedicineRole);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'ระงับการใช้งานบัญชี (Deactivate/Soft Delete)' })
   @ApiParam({ name: 'id', description: 'User ID' })

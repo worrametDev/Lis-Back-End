@@ -213,6 +213,10 @@ model User {
   province     String?      // จังหวัด
   healthRegion String?      // เขตสุขภาพ เช่น "เขต 4"
   
+  // Telemedicine Access & Role Management
+  telemedicineAccess Boolean  @default(false)
+  telemedicineRole   String?  // e.g. "DOCTOR", "NURSE", "STAFF", "ADMIN"
+  
   parentSiteId String?
   parentSite   ParentSite?  @relation(fields: [parentSiteId], references: [id])
   clientSiteId String?
