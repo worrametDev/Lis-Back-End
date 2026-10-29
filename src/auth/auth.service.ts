@@ -73,6 +73,8 @@ export class AuthService {
         province: user.province || '',
         healthRegion: user.healthRegion || '',
         signatureUrl: user.signatureUrl || '',
+        telemedicineAccess: user.telemedicineAccess ?? false,
+        telemedicineRole: user.telemedicineRole || '',
       },
     };
   }
@@ -103,6 +105,8 @@ export class AuthService {
       province: user.province || '',
       healthRegion: user.healthRegion || '',
       signatureUrl: user.signatureUrl || '',
+      telemedicineAccess: user.telemedicineAccess ?? false,
+      telemedicineRole: user.telemedicineRole || '',
     };
   }
 }

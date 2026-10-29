@@ -77,6 +77,8 @@ export class UsersService {
       signatureUrl: u.signatureUrl || '',
       licenseNo: u.licenseNo || '',
       license: u.licenseNo || '',
+      telemedicineAccess: u.telemedicineAccess ?? false,
+      telemedicineRole: u.telemedicineRole || '',
       createdAt: u.createdAt,
     }));
   }
@@ -103,6 +105,13 @@ export class UsersService {
       { id: 'Client Site User', name: 'Client Site User' },
     ];
 
+    const telemedicineRoles = [
+      { id: 'DOCTOR', name: 'แพทย์ (Doctor)' },
+      { id: 'NURSE', name: 'พยาบาล (Nurse)' },
+      { id: 'STAFF', name: 'เจ้าหน้าที่ (Staff)' },
+      { id: 'ADMIN', name: 'ผู้ดูแลระบบ (Telemedicine Admin)' },
+    ];
+
     const statuses = [
       { id: 'Active', name: 'Active' },
       { id: 'Inactive', name: 'Inactive' },
@@ -112,6 +121,7 @@ export class UsersService {
       parentSites,
       clientSites,
       roles,
+      telemedicineRoles,
       statuses,
     };
 
@@ -134,6 +144,8 @@ export class UsersService {
       clientSite: user.clientSite?.siteName || user.parentSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
       parentSite: user.parentSite?.siteName || 'โรงพยาบาลเสนา',
       license: user.licenseNo || '',
+      telemedicineAccess: user.telemedicineAccess ?? false,
+      telemedicineRole: user.telemedicineRole || '',
     };
   }
 
@@ -160,6 +172,8 @@ export class UsersService {
     signatureUrl?: string;
     parentSiteId?: string;
     clientSiteId?: string;
+    telemedicineAccess?: boolean;
+    telemedicineRole?: string;
   }) {
     if (!data.username || !data.firstName) {
       throw new BadRequestException('กรุณาระบุ Username และ First Name');
@@ -225,6 +239,8 @@ export class UsersService {
         province: data.province,
         healthRegion: data.healthRegion,
         signatureUrl: data.signatureUrl,
+        telemedicineAccess: data.telemedicineAccess ?? false,
+        telemedicineRole: data.telemedicineRole || null,
         parentSiteId,
         clientSiteId,
       },
@@ -261,6 +277,8 @@ export class UsersService {
       signatureUrl: newUser.signatureUrl || '',
       licenseNo: newUser.licenseNo || '',
       license: newUser.licenseNo || '',
+      telemedicineAccess: newUser.telemedicineAccess ?? false,
+      telemedicineRole: newUser.telemedicineRole || '',
       createdAt: newUser.createdAt,
     };
   }
@@ -284,6 +302,12 @@ export class UsersService {
     if (updateData.license) {
       updateData.licenseNo = updateData.license;
       delete updateData.license;
+    }
+    if (typeof updateData.telemedicineAccess === 'boolean') {
+      updateData.telemedicineAccess = updateData.telemedicineAccess;
+    }
+    if (updateData.telemedicineRole !== undefined) {
+      updateData.telemedicineRole = updateData.telemedicineRole || null;
     }
 
     // Resolve clientSite & parentSite by name or code if provided
@@ -358,7 +382,34 @@ export class UsersService {
       signatureUrl: updated.signatureUrl || '',
       licenseNo: updated.licenseNo || '',
       license: updated.licenseNo || '',
+      telemedicineAccess: updated.telemedicineAccess ?? false,
+      telemedicineRole: updated.telemedicineRole || '',
       createdAt: updated.createdAt,
+    };
+  }
+
+  async updateTelemedicineAccess(id: string, telemedicineAccess: boolean, telemedicineRole?: string) {
+    await this.findOne(id);
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: {
+        telemedicineAccess,
+        telemedicineRole: telemedicineAccess ? (telemedicineRole || 'DOCTOR') : null,
+      },
+      include: { parentSite: true, clientSite: true },
+    });
+
+    try {
+      await this.cacheManager.del('user_options');
+    } catch {}
+
+    return {
+      id: updated.id,
+      username: updated.username,
+      fullname: `${updated.firstName} ${updated.lastName}`.trim(),
+      telemedicineAccess: updated.telemedicineAccess,
+      telemedicineRole: updated.telemedicineRole || '',
+      status: updated.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
     };
   }
 
