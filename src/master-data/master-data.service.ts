@@ -263,7 +263,7 @@ export class MasterDataService {
       data: updateData,
     });
 
-    // Cascade Deactivation: เมื่อแม่ข่ายถูกระงับการใช้งาน ให้ระงับลูกข่าย (Client Site) และวอร์ด (Ward) ทั้งหมดในสังกัดทันที
+    // Two-way Cascade: เมื่อแม่ข่ายเปลี่ยนสถานะ ให้ปรับสถานะลูกข่าย (Client Site) และวอร์ด (Ward) ในสังกัดทั้งหมดตามอัตโนมัติ
     if (updateData.siteStatus === 'Inactive') {
       await this.prisma.clientSite.updateMany({
         where: { parentSiteId: id },
@@ -272,6 +272,15 @@ export class MasterDataService {
       await this.prisma.ward.updateMany({
         where: { parentSiteId: id },
         data: { wardStatus: 'Inactive' },
+      });
+    } else if (updateData.siteStatus === 'Active') {
+      await this.prisma.clientSite.updateMany({
+        where: { parentSiteId: id },
+        data: { siteStatus: 'Active' },
+      });
+      await this.prisma.ward.updateMany({
+        where: { parentSiteId: id },
+        data: { wardStatus: 'Active' },
       });
     }
 
