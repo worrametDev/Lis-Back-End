@@ -29,7 +29,9 @@ export class JwtAuthGuard implements CanActivate {
     const token = this.extractTokenFromRequest(request);
 
     if (!token) {
-      throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อนทำรายการ (Missing access token)');
+      throw new UnauthorizedException(
+        'กรุณาเข้าสู่ระบบก่อนทำรายการ (Missing access token)',
+      );
     }
 
     try {
@@ -37,14 +39,20 @@ export class JwtAuthGuard implements CanActivate {
       request.user = payload;
       return true;
     } catch {
-      throw new UnauthorizedException('Token หมดอายุหรือไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่');
+      throw new UnauthorizedException(
+        'Token หมดอายุหรือไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่',
+      );
     }
   }
 
   private extractTokenFromRequest(request: any): string | null {
     // 1. From Authorization Bearer header
     const authHeader = request.headers.authorization;
-    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    if (
+      authHeader &&
+      typeof authHeader === 'string' &&
+      authHeader.startsWith('Bearer ')
+    ) {
       return authHeader.substring(7);
     }
 

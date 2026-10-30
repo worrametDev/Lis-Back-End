@@ -32,7 +32,7 @@ export class AuthService {
       throw new UnauthorizedException('ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง');
     }
 
-    const { passwordHash, ...result } = user;
+    const { passwordHash: _passwordHash, ...result } = user;
     return result;
   }
 
@@ -41,7 +41,9 @@ export class AuthService {
       where: { siteStatus: 'Active' },
       orderBy: { createdAt: 'asc' },
     });
-    return primarySite?.siteName || process.env.HOSPITAL_NAME || 'โรงพยาบาลเสนา';
+    return (
+      primarySite?.siteName || process.env.HOSPITAL_NAME || 'โรงพยาบาลเสนา'
+    );
   }
 
   async login(username: string, pass: string) {
@@ -67,7 +69,9 @@ export class AuthService {
         status: user.userStatus,
         parentSite: user.parentSite?.siteName || defaultParent,
         parentSiteId: user.parentSiteId || '',
-        clientSite: user.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+        clientSite:
+          user.clientSite?.siteName ||
+          'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
         clientSiteId: user.clientSiteId || '',
         licenseNo: user.licenseNo || '',
         province: user.province || '',
@@ -91,7 +95,7 @@ export class AuthService {
       throw new UnauthorizedException('ไม่พบข้อมูลผู้ใช้งาน');
     }
     const defaultParent = await this.getDefaultParentSiteName();
-    const { passwordHash, ...result } = user;
+    const { passwordHash: _passwordHash, ...result } = user;
     return {
       ...result,
       fullname: `${user.firstName} ${user.lastName}`.trim(),
@@ -99,7 +103,8 @@ export class AuthService {
       status: user.userStatus,
       parentSite: user.parentSite?.siteName || defaultParent,
       parentSiteId: user.parentSiteId || '',
-      clientSite: user.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      clientSite:
+        user.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
       clientSiteId: user.clientSiteId || '',
       licenseNo: user.licenseNo || '',
       province: user.province || '',

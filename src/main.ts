@@ -52,7 +52,10 @@ async function bootstrap() {
       if (isAllowed) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS Error: Origin '${origin}' is not authorized.`), false);
+      return callback(
+        new Error(`CORS Error: Origin '${origin}' is not authorized.`),
+        false,
+      );
     },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
@@ -72,12 +75,12 @@ async function bootstrap() {
     .setTitle('Healthdi Lab (LIS) — API Documentation & Test Center')
     .setDescription(
       'ระบบสารสนเทศห้องปฏิบัติการ (LIS) — โรงพยาบาลเสนา (Sena Hospital) & เครือข่าย รพ.สต.\n\n' +
-      '🏢 พัฒนาโดย: MP GROUP (Thailand) CO.,LTD\n' +
-      '📄 ออกแบบตาม: Healthdi LAB Design Version 1.0.0 (01-12-2026)\n\n' +
-      '💡 **คำแนะนำการทดสอบ:**\n' +
-      '1. เริ่มต้นด้วยการทดสอบ `POST /api/v1/auth/login` โดยใช้ Username `thititada.p` และ Password `Admin@1234`\n' +
-      '2. นำ `accessToken` ที่ได้รับไปกดปุ่ม **Authorize 🔓** ด้านขวาบน เพื่อปลดล็อกทุก Endpoint\n' +
-      '3. สามารถทดสอบยิง API ได้โดยตรงผ่านปุ่ม **Try it out** ในแต่ละ Endpoint',
+        '🏢 พัฒนาโดย: MP GROUP (Thailand) CO.,LTD\n' +
+        '📄 ออกแบบตาม: Healthdi LAB Design Version 1.0.0 (01-12-2026)\n\n' +
+        '💡 **คำแนะนำการทดสอบ:**\n' +
+        '1. เริ่มต้นด้วยการทดสอบ `POST /api/v1/auth/login` โดยใช้ Username `thititada.p` และ Password `Admin@1234`\n' +
+        '2. นำ `accessToken` ที่ได้รับไปกดปุ่ม **Authorize 🔓** ด้านขวาบน เพื่อปลดล็อกทุก Endpoint\n' +
+        '3. สามารถทดสอบยิง API ได้โดยตรงผ่านปุ่ม **Try it out** ในแต่ละ Endpoint',
     )
     .setVersion('1.0.0')
     .addBearerAuth(
@@ -91,14 +94,35 @@ async function bootstrap() {
       },
       'JWT-auth',
     )
-    .addTag('Authentication', 'ระบบเข้าสู่ระบบและตรวจสอบสิทธิ์ (JWT Login & Profile)')
+    .addTag(
+      'Authentication',
+      'ระบบเข้าสู่ระบบและตรวจสอบสิทธิ์ (JWT Login & Profile)',
+    )
     .addTag('Users', 'จัดการข้อมูลบัญชีผู้ใช้งาน (Account / User Settings)')
-    .addTag('Master Data', 'จัดการข้อมูลแม่ข่าย ลูกข่าย วอร์ด แผนก และสภาพสิ่งส่งตรวจ (Parent Site, Client Site, Ward, Dept, Condition)')
-    .addTag('Order Entry', 'ทะเบียนคำสั่งตรวจและออกรหัสสิ่งส่งตรวจ (LN / Barcode)')
-    .addTag('Sample Receiving', 'กระบวนการตรวจรับและปฏิเสธสิ่งส่งตรวจ (Sample Receiving & Reject)')
-    .addTag('Workstation', 'ห้องตรวจวิเคราะห์ผลแล็บ บันทึกผล คำนวณ Flag H/A/N และ Verify/Approve')
-    .addTag('Dashboard', 'ตัวเลขสถิติและตัวชี้วัด KPI ของห้องปฏิบัติการ (KPI Cards)')
-    .addTag('Uploads', 'บริการอัปโหลดไฟล์ (Logo โรงพยาบาล, ใบรับรอง ISO, ลายเซ็น ว.ท.)')
+    .addTag(
+      'Master Data',
+      'จัดการข้อมูลแม่ข่าย ลูกข่าย วอร์ด แผนก และสภาพสิ่งส่งตรวจ (Parent Site, Client Site, Ward, Dept, Condition)',
+    )
+    .addTag(
+      'Order Entry',
+      'ทะเบียนคำสั่งตรวจและออกรหัสสิ่งส่งตรวจ (LN / Barcode)',
+    )
+    .addTag(
+      'Sample Receiving',
+      'กระบวนการตรวจรับและปฏิเสธสิ่งส่งตรวจ (Sample Receiving & Reject)',
+    )
+    .addTag(
+      'Workstation',
+      'ห้องตรวจวิเคราะห์ผลแล็บ บันทึกผล คำนวณ Flag H/A/N และ Verify/Approve',
+    )
+    .addTag(
+      'Dashboard',
+      'ตัวเลขสถิติและตัวชี้วัด KPI ของห้องปฏิบัติการ (KPI Cards)',
+    )
+    .addTag(
+      'Uploads',
+      'บริการอัปโหลดไฟล์ (Logo โรงพยาบาล, ใบรับรอง ISO, ลายเซ็น ว.ท.)',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
@@ -119,7 +143,11 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
-  console.log(`🚀 Healthdi Lab Backend running on: http://localhost:${port}/api/v1`);
-  console.log(`📚 Swagger API Docs available at: http://localhost:${port}/docs`);
+  console.log(
+    `🚀 Healthdi Lab Backend running on: http://localhost:${port}/api/v1`,
+  );
+  console.log(
+    `📚 Swagger API Docs available at: http://localhost:${port}/docs`,
+  );
 }
 bootstrap();

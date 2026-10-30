@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,7 +18,14 @@ export class WorkstationService {
 
     const samples = await this.prisma.sample.findMany({
       where: {
-        status: { in: [SpecimenStatus.REGISTERED, SpecimenStatus.RECEIVED, SpecimenStatus.IN_PROCESS, SpecimenStatus.VERIFIED] },
+        status: {
+          in: [
+            SpecimenStatus.REGISTERED,
+            SpecimenStatus.RECEIVED,
+            SpecimenStatus.IN_PROCESS,
+            SpecimenStatus.VERIFIED,
+          ],
+        },
       },
       include: {
         order: {
@@ -35,9 +42,14 @@ export class WorkstationService {
 
     const result = samples.map((s, idx) => {
       // In case an order has multiple samples / specimen types, join distinct values with a comma
-      const orderSpecimenTypes = s.order?.samples && s.order.samples.length > 0
-        ? Array.from(new Set(s.order.samples.map((sm) => sm.specimenType).filter(Boolean))).join(', ')
-        : s.specimenType;
+      const orderSpecimenTypes =
+        s.order?.samples && s.order.samples.length > 0
+          ? Array.from(
+              new Set(
+                s.order.samples.map((sm) => sm.specimenType).filter(Boolean),
+              ),
+            ).join(', ')
+          : s.specimenType;
 
       return {
         no: idx + 1,
@@ -45,7 +57,9 @@ export class WorkstationService {
         labNo: s.labNumber,
         sampleId: s.id,
         patientName: s.order.patientName,
-        clientSite: s.order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+        clientSite:
+          s.order.clientSite?.siteName ||
+          'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
         ward: s.order.ward?.wardName || 'OPD',
         specimenType: orderSpecimenTypes || s.specimenType,
         status: s.status,
@@ -120,11 +134,13 @@ export class WorkstationService {
     }
 
     const resolvedResults = results.map((r) => {
-      const lastResultValue = r.lastResult || previousTestMap.get(r.testName) || '-';
+      const lastResultValue =
+        r.lastResult || previousTestMap.get(r.testName) || '-';
 
       let flagChar: 'H' | 'A' | 'N' = 'N';
       if (r.flag === ResultFlag.HIGH) flagChar = 'H';
-      else if (r.flag === ResultFlag.ABNORMAL || r.flag === ResultFlag.LOW) flagChar = 'A';
+      else if (r.flag === ResultFlag.ABNORMAL || r.flag === ResultFlag.LOW)
+        flagChar = 'A';
 
       return {
         id: r.id,
@@ -161,7 +177,14 @@ export class WorkstationService {
     return ResultFlag.NORMAL;
   }
 
-  async updateResults(items: { id: string; testResult?: string; repeatResult?: string; flag?: 'H' | 'A' | 'N' }[]) {
+  async updateResults(
+    items: {
+      id: string;
+      testResult?: string;
+      repeatResult?: string;
+      flag?: 'H' | 'A' | 'N';
+    }[],
+  ) {
     if (!items || items.length === 0) {
       throw new BadRequestException('ไม่มีรายการผลตรวจที่ต้องการบันทึก');
     }
@@ -169,7 +192,9 @@ export class WorkstationService {
     const updated = [];
     const affectedSampleIds = new Set<string>();
     for (const item of items) {
-      const current = await this.prisma.testResult.findUnique({ where: { id: item.id } });
+      const current = await this.prisma.testResult.findUnique({
+        where: { id: item.id },
+      });
       if (!current) continue;
       affectedSampleIds.add(current.sampleId);
 
@@ -179,12 +204,20 @@ export class WorkstationService {
       // กรณี ตรวจซ้ำ (repeat) แล้วส่งผลมา:
       // - ถ้าในช่อง TEST RESULT มีค่าอยู่แล้ว ให้มาลงในช่อง REPEAT RESULT แทน
       // - แต่ถ้าช่อง TEST RESULT ว่าง (เช่น กรณี DELETE RESULT ให้เป็นช่องว่างก่อน) ให้ไปลงช่อง TEST RESULT แทนที่ช่อง REPEAT RESULT
-      if (item.repeatResult !== undefined && item.repeatResult !== null && item.repeatResult !== '') {
-        const hasExistingTestResult = current.testResult && current.testResult.trim() !== '';
+      if (
+        item.repeatResult !== undefined &&
+        item.repeatResult !== null &&
+        item.repeatResult !== ''
+      ) {
+        const hasExistingTestResult =
+          current.testResult && current.testResult.trim() !== '';
         if (hasExistingTestResult && item.testResult === undefined) {
           finalRepeatResult = item.repeatResult;
           finalTestResult = current.testResult;
-        } else if (!hasExistingTestResult && (item.testResult === undefined || item.testResult === '')) {
+        } else if (
+          !hasExistingTestResult &&
+          (item.testResult === undefined || item.testResult === '')
+        ) {
           finalTestResult = item.repeatResult;
           finalRepeatResult = '';
         }
@@ -196,7 +229,10 @@ export class WorkstationService {
         else if (item.flag === 'A') flagEnum = ResultFlag.ABNORMAL;
         else flagEnum = ResultFlag.NORMAL;
       } else if (finalTestResult) {
-        flagEnum = this.calculateFlag(finalTestResult, current.referenceRange || '');
+        flagEnum = this.calculateFlag(
+          finalTestResult,
+          current.referenceRange || '',
+        );
       }
 
       const res = await this.prisma.testResult.update({
@@ -221,19 +257,22 @@ export class WorkstationService {
     };
   }
 
-  async approve(data: { sampleId?: string; resultIds?: string[]; approvedById?: string }) {
+  async approve(data: {
+    sampleId?: string;
+    resultIds?: string[];
+    approvedById?: string;
+  }) {
     if (!data.sampleId && (!data.resultIds || data.resultIds.length === 0)) {
-      throw new BadRequestException('กรุณาระบุ Sample ID หรือ Result IDs ที่ต้องการอนุมัติ');
+      throw new BadRequestException(
+        'กรุณาระบุ Sample ID หรือ Result IDs ที่ต้องการอนุมัติ',
+      );
     }
 
     let userUuid: string | undefined = undefined;
     if (data.approvedById) {
       const user = await this.prisma.user.findFirst({
         where: {
-          OR: [
-            { id: data.approvedById },
-            { username: data.approvedById },
-          ],
+          OR: [{ id: data.approvedById }, { username: data.approvedById }],
         },
       });
       if (user) {
@@ -252,7 +291,9 @@ export class WorkstationService {
         },
       });
       if (!sampleId) {
-        const first = await this.prisma.testResult.findUnique({ where: { id: data.resultIds[0] } });
+        const first = await this.prisma.testResult.findUnique({
+          where: { id: data.resultIds[0] },
+        });
         if (first) sampleId = first.sampleId;
       }
     } else if (sampleId) {
@@ -273,7 +314,9 @@ export class WorkstationService {
         where: { id: sampleId },
         data: { status: SpecimenStatus.APPROVED },
       });
-      const s = await this.prisma.sample.findUnique({ where: { id: sampleId } });
+      const s = await this.prisma.sample.findUnique({
+        where: { id: sampleId },
+      });
       if (s) {
         await this.prisma.order.update({
           where: { id: s.orderId },
@@ -289,7 +332,10 @@ export class WorkstationService {
   }
 
   async voidResult(id: string, reason: string) {
-    if (!reason) throw new BadRequestException('กรุณาระบุเหตุผลการยกเลิกผลแล็บ (ตาม ISO 15189)');
+    if (!reason)
+      throw new BadRequestException(
+        'กรุณาระบุเหตุผลการยกเลิกผลแล็บ (ตาม ISO 15189)',
+      );
     return this.prisma.testResult.update({
       where: { id },
       data: {
@@ -300,8 +346,16 @@ export class WorkstationService {
     });
   }
 
-  async deleteResults(data: { resultIds: string[]; reason: string; userAccount?: string; sampleId?: string }) {
-    if (!data.reason) throw new BadRequestException('กรุณาระบุเหตุผลการลบผลตรวจแล็บ (ตาม ISO 15189)');
+  async deleteResults(data: {
+    resultIds: string[];
+    reason: string;
+    userAccount?: string;
+    sampleId?: string;
+  }) {
+    if (!data.reason)
+      throw new BadRequestException(
+        'กรุณาระบุเหตุผลการลบผลตรวจแล็บ (ตาม ISO 15189)',
+      );
     if (!data.resultIds || data.resultIds.length === 0) {
       throw new BadRequestException('กรุณาเลือกรายการที่ต้องการลบ');
     }
@@ -340,8 +394,17 @@ export class WorkstationService {
     };
   }
 
-  async reStatus(data: { resultIds: string[]; reason: string; targetStatus?: string; userAccount?: string; sampleId?: string }) {
-    if (!data.reason) throw new BadRequestException('กรุณาระบุเหตุผลการปรับสถานะ (ตาม ISO 15189)');
+  async reStatus(data: {
+    resultIds: string[];
+    reason: string;
+    targetStatus?: string;
+    userAccount?: string;
+    sampleId?: string;
+  }) {
+    if (!data.reason)
+      throw new BadRequestException(
+        'กรุณาระบุเหตุผลการปรับสถานะ (ตาม ISO 15189)',
+      );
 
     if (data.sampleId) {
       await this.cacheManager.del(`workstation_results_${data.sampleId}`);

@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  Inject,
+} from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,16 +20,20 @@ export class UsersService {
   private mapRole(roleString?: string): UserRole {
     if (!roleString) return UserRole.SYSTEM_ADMINISTRATOR;
     const clean = roleString.trim().toUpperCase();
-    if (clean.includes('LAB') || clean === 'LAB_ADMINISTRATOR') return UserRole.LAB_ADMINISTRATOR;
-    if (clean.includes('TECH') || clean === 'MEDICAL_TECHNOLOGIST') return UserRole.MEDICAL_TECHNOLOGIST;
-    if (clean.includes('CLIENT') || clean === 'CLIENT_SITE_USER') return UserRole.CLIENT_SITE_USER;
+    if (clean.includes('LAB') || clean === 'LAB_ADMINISTRATOR')
+      return UserRole.LAB_ADMINISTRATOR;
+    if (clean.includes('TECH') || clean === 'MEDICAL_TECHNOLOGIST')
+      return UserRole.MEDICAL_TECHNOLOGIST;
+    if (clean.includes('CLIENT') || clean === 'CLIENT_SITE_USER')
+      return UserRole.CLIENT_SITE_USER;
     return UserRole.SYSTEM_ADMINISTRATOR;
   }
 
   private mapStatus(statusString?: string): UserStatus {
     if (!statusString) return UserStatus.ACTIVE;
     const clean = statusString.trim().toUpperCase();
-    if (clean === 'INACTIVE' || clean.includes('ระงับ')) return UserStatus.INACTIVE;
+    if (clean === 'INACTIVE' || clean.includes('ระงับ'))
+      return UserStatus.INACTIVE;
     return UserStatus.ACTIVE;
   }
 
@@ -68,7 +77,10 @@ export class UsersService {
       organization: u.organization || '',
       userRole: u.userRole.replace(/_/g, ' '),
       role: u.userRole.replace(/_/g, ' '),
-      clientSite: u.clientSite?.siteName || u.parentSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      clientSite:
+        u.clientSite?.siteName ||
+        u.parentSite?.siteName ||
+        'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
       clientSiteId: u.clientSiteId || '',
       parentSite: u.parentSite?.siteName || 'โรงพยาบาลเสนา',
       parentSiteId: u.parentSiteId || '',
@@ -89,12 +101,25 @@ export class UsersService {
 
     const parentSites = await this.prisma.parentSite.findMany({
       where: { siteStatus: 'Active' },
-      select: { id: true, siteCode: true, siteName: true, siteType: true, province: true },
+      select: {
+        id: true,
+        siteCode: true,
+        siteName: true,
+        siteType: true,
+        province: true,
+      },
       orderBy: { siteName: 'asc' },
     });
     const clientSites = await this.prisma.clientSite.findMany({
       where: { siteStatus: 'Active' },
-      select: { id: true, siteCode: true, siteName: true, siteType: true, parentSiteId: true, province: true },
+      select: {
+        id: true,
+        siteCode: true,
+        siteName: true,
+        siteType: true,
+        parentSiteId: true,
+        province: true,
+      },
       orderBy: { siteName: 'asc' },
     });
 
@@ -135,13 +160,16 @@ export class UsersService {
       include: { parentSite: true, clientSite: true },
     });
     if (!user) throw new NotFoundException(`User with ID ${id} not found`);
-    const { passwordHash, ...safeUser } = user;
+    const { passwordHash: _passwordHash, ...safeUser } = user;
     return {
       ...safeUser,
       fullname: `${user.firstName} ${user.lastName}`.trim(),
       role: user.userRole.replace(/_/g, ' '),
       status: user.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
-      clientSite: user.clientSite?.siteName || user.parentSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      clientSite:
+        user.clientSite?.siteName ||
+        user.parentSite?.siteName ||
+        'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
       parentSite: user.parentSite?.siteName || 'โรงพยาบาลเสนา',
       license: user.licenseNo || '',
       telemedicineAccess: user.telemedicineAccess ?? false,
@@ -183,7 +211,9 @@ export class UsersService {
       where: { username: data.username },
     });
     if (existing) {
-      throw new BadRequestException(`Username "${data.username}" นี้ถูกใช้งานแล้ว`);
+      throw new BadRequestException(
+        `Username "${data.username}" นี้ถูกใช้งานแล้ว`,
+      );
     }
 
     const passwordHash = bcrypt.hashSync(data.password || 'Admin@1234', 10);
@@ -257,7 +287,8 @@ export class UsersService {
     return {
       id: newUser.id,
       status: newUser.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
-      userStatus: newUser.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
+      userStatus:
+        newUser.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
       username: newUser.username,
       fullname: `${newUser.firstName} ${newUser.lastName}`.trim(),
       firstName: newUser.firstName,
@@ -268,7 +299,10 @@ export class UsersService {
       organization: newUser.organization || '',
       userRole: newUser.userRole.replace(/_/g, ' '),
       role: newUser.userRole.replace(/_/g, ' '),
-      clientSite: newUser.clientSite?.siteName || newUser.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      clientSite:
+        newUser.clientSite?.siteName ||
+        newUser.parentSite?.siteName ||
+        'โรงพยาบาลเสนา',
       clientSiteId: newUser.clientSiteId || '',
       parentSite: newUser.parentSite?.siteName || 'โรงพยาบาลเสนา',
       parentSiteId: newUser.parentSiteId || '',
@@ -292,11 +326,15 @@ export class UsersService {
       delete updateData.password;
     }
     if (updateData.role || updateData.userRole) {
-      updateData.userRole = this.mapRole(updateData.role || updateData.userRole);
+      updateData.userRole = this.mapRole(
+        updateData.role || updateData.userRole,
+      );
       delete updateData.role;
     }
     if (updateData.userStatus || updateData.status) {
-      updateData.userStatus = this.mapStatus(updateData.userStatus || updateData.status);
+      updateData.userStatus = this.mapStatus(
+        updateData.userStatus || updateData.status,
+      );
       delete updateData.status;
     }
     if (updateData.license) {
@@ -323,7 +361,8 @@ export class UsersService {
       });
       if (foundClient) {
         updateData.clientSiteId = foundClient.id;
-        if (!updateData.parentSiteId) updateData.parentSiteId = foundClient.parentSiteId;
+        if (!updateData.parentSiteId)
+          updateData.parentSiteId = foundClient.parentSiteId;
       }
     }
 
@@ -366,7 +405,8 @@ export class UsersService {
     return {
       id: updated.id,
       status: updated.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
-      userStatus: updated.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
+      userStatus:
+        updated.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
       username: updated.username,
       fullname: `${updated.firstName} ${updated.lastName}`.trim(),
       firstName: updated.firstName,
@@ -377,7 +417,10 @@ export class UsersService {
       organization: updated.organization || '',
       userRole: updated.userRole.replace(/_/g, ' '),
       role: updated.userRole.replace(/_/g, ' '),
-      clientSite: updated.clientSite?.siteName || updated.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      clientSite:
+        updated.clientSite?.siteName ||
+        updated.parentSite?.siteName ||
+        'โรงพยาบาลเสนา',
       clientSiteId: updated.clientSiteId || '',
       parentSite: updated.parentSite?.siteName || 'โรงพยาบาลเสนา',
       parentSiteId: updated.parentSiteId || '',
@@ -392,13 +435,19 @@ export class UsersService {
     };
   }
 
-  async updateTelemedicineAccess(id: string, telemedicineAccess: boolean, telemedicineRole?: string) {
+  async updateTelemedicineAccess(
+    id: string,
+    telemedicineAccess: boolean,
+    telemedicineRole?: string,
+  ) {
     await this.findOne(id);
     const updated = await this.prisma.user.update({
       where: { id },
       data: {
         telemedicineAccess,
-        telemedicineRole: telemedicineAccess ? (telemedicineRole || 'DOCTOR') : null,
+        telemedicineRole: telemedicineAccess
+          ? telemedicineRole || 'DOCTOR'
+          : null,
       },
       include: { parentSite: true, clientSite: true },
     });

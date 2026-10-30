@@ -36,7 +36,11 @@ export class SamplesService {
         { labNumber: { contains: query.search, mode: 'insensitive' } },
         { barcode: { contains: query.search, mode: 'insensitive' } },
         { order: { hn: { contains: query.search, mode: 'insensitive' } } },
-        { order: { patientName: { contains: query.search, mode: 'insensitive' } } },
+        {
+          order: {
+            patientName: { contains: query.search, mode: 'insensitive' },
+          },
+        },
       ];
     }
     if (query?.createdFrom || query?.createdTo) {
@@ -50,7 +54,8 @@ export class SamplesService {
     }
     if (query?.receivedFrom || query?.receivedTo) {
       where.receivedAt = {};
-      if (query.receivedFrom) where.receivedAt.gte = new Date(query.receivedFrom);
+      if (query.receivedFrom)
+        where.receivedAt.gte = new Date(query.receivedFrom);
       if (query.receivedTo) {
         const toDate = new Date(query.receivedTo);
         toDate.setHours(23, 59, 59, 999);
@@ -91,7 +96,9 @@ export class SamplesService {
         year: 'numeric',
       }),
       shipment: s.order.shipment?.shipmentNumber || '-',
-      clientSite: s.order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      clientSite:
+        s.order.clientSite?.siteName ||
+        'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
       hn: s.order.hn,
       labNo: s.labNumber,
       patientName: s.order.patientName,
@@ -101,7 +108,8 @@ export class SamplesService {
         s.testResults?.[0]?.testPanel ||
         s.testResults?.[0]?.testName ||
         'Complete Blood Count (CBC)',
-      healthcareEntitlement: s.order.entitlement || 'หลักประกันสุขภาพแห่งชาติ (UC)',
+      healthcareEntitlement:
+        s.order.entitlement || 'หลักประกันสุขภาพแห่งชาติ (UC)',
       urgentStatus: s.urgentStatus || s.order.urgentStatus || 'NORMAL',
       ward: s.order.ward?.wardName || s.order.patientType || 'ผู้ป่วยนอก (OPD)',
       condition: s.sampleCondition?.conditionName || 'ปกติ (Normal)',
@@ -137,9 +145,13 @@ export class SamplesService {
     conditionOther?: string;
     receivedById?: string;
   }) {
-    const validSampleIds = (data.sampleIds || []).filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+    const validSampleIds = (data.sampleIds || []).filter(
+      (id): id is string => typeof id === 'string' && id.trim().length > 0,
+    );
     if (validSampleIds.length === 0) {
-      throw new BadRequestException('กรุณาระบุรายการสิ่งส่งตรวจที่ต้องการตรวจรับ');
+      throw new BadRequestException(
+        'กรุณาระบุรายการสิ่งส่งตรวจที่ต้องการตรวจรับ',
+      );
     }
 
     let conditionId = data.sampleConditionId;
@@ -206,7 +218,9 @@ export class SamplesService {
     rejectedById?: string;
   }) {
     if (!data.sampleIds || data.sampleIds.length === 0) {
-      throw new BadRequestException('กรุณาระบุรายการสิ่งส่งตรวจที่ต้องการปฏิเสธ');
+      throw new BadRequestException(
+        'กรุณาระบุรายการสิ่งส่งตรวจที่ต้องการปฏิเสธ',
+      );
     }
 
     let conditionId = data.sampleConditionId;
@@ -250,9 +264,13 @@ export class SamplesService {
   }
 
   async reset(sampleIds: string[]) {
-    const validSampleIds = (sampleIds || []).filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+    const validSampleIds = (sampleIds || []).filter(
+      (id): id is string => typeof id === 'string' && id.trim().length > 0,
+    );
     if (validSampleIds.length === 0) {
-      throw new BadRequestException('กรุณาระบุรายการสิ่งส่งตรวจที่ต้องการรีเซ็ต');
+      throw new BadRequestException(
+        'กรุณาระบุรายการสิ่งส่งตรวจที่ต้องการรีเซ็ต',
+      );
     }
 
     const updated = await this.prisma.sample.updateMany({
