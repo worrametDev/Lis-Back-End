@@ -348,6 +348,10 @@ export class UsersService {
     delete updateData.parentSite;
     delete updateData.fullname;
     delete updateData.confirmPassword;
+    delete updateData.id;
+    delete updateData.createdAt;
+    delete updateData.updatedAt;
+    delete updateData.status;
 
     const updated = await this.prisma.user.update({
       where: { id },

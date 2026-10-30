@@ -118,7 +118,7 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document, swaggerOptions);
 
   const port = process.env.PORT ?? 3001;
-  await app.listen(port, '0.0.0.0');
+  await app.listen(port);
   console.log(`🚀 Healthdi Lab Backend running on: http://localhost:${port}/api/v1`);
   console.log(`📚 Swagger API Docs available at: http://localhost:${port}/docs`);
 }

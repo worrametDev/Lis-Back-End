@@ -8,7 +8,7 @@ export class MasterDataService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-  ) {}
+  ) { }
 
   // ==========================================
   // 0. HEALTH CHECK
@@ -244,10 +244,37 @@ export class MasterDataService {
   }
 
   async updateParentSite(id: string, data: any) {
+    const allowed = [
+      'siteCode', 'siteName', 'siteType', 'siteStatus', 'lnPattern',
+      'address', 'subdistrict', 'district', 'province', 'zipcode',
+      'hospitalFile', 'isoFile'
+    ];
+    const updateData: any = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) updateData[key] = data[key];
+    }
+    if (data.status !== undefined && updateData.siteStatus === undefined) {
+      updateData.siteStatus = data.status;
+    }
     const updated = await this.prisma.parentSite.update({
       where: { id },
-      data,
+      data: updateData,
     });
+
+    // Cascade Deactivation: เมื่อแม่ข่ายถูกระงับการใช้งาน ให้ระงับลูกข่าย (Client Site) และวอร์ด (Ward) ทั้งหมดในสังกัดทันที
+    if (updateData.siteStatus === 'Inactive') {
+      await this.prisma.clientSite.updateMany({
+        where: { parentSiteId: id },
+        data: { siteStatus: 'Inactive' },
+      });
+      await this.prisma.ward.updateMany({
+        where: { parentSiteId: id },
+        data: { wardStatus: 'Inactive' },
+      });
+      await this.cacheManager.del('master_client_sites_all');
+      await this.cacheManager.del('master_wards');
+    }
+
     await this.cacheManager.del('master_parent_sites');
     await this.cacheManager.del('master_site_info');
     await this.cacheManager.del('user_options');
@@ -255,6 +282,28 @@ export class MasterDataService {
   }
 
   async deleteParentSite(id: string) {
+    const parent = await this.prisma.parentSite.findUnique({ where: { id } });
+    if (!parent) throw new NotFoundException('ไม่พบข้อมูล Parent Site ในระบบ');
+
+    const [clientCount, userCount, orderCount, wardCount] = await Promise.all([
+      this.prisma.clientSite.count({ where: { parentSiteId: id } }),
+      this.prisma.user.count({ where: { parentSiteId: id } }),
+      this.prisma.order.count({ where: { parentSiteId: id } }),
+      this.prisma.ward.count({ where: { parentSiteId: id } }),
+    ]);
+
+    const reasons: string[] = [];
+    if (clientCount > 0) reasons.push(`Client Site (${clientCount} แห่ง)`);
+    if (userCount > 0) reasons.push(`ผู้ใช้งาน (${userCount} บัญชี)`);
+    if (orderCount > 0) reasons.push(`ใบสั่งตรวจ (${orderCount} รายการ)`);
+    if (wardCount > 0) reasons.push(`หอผู้ป่วย (${wardCount} แผนก)`);
+
+    if (reasons.length > 0) {
+      throw new BadRequestException(
+        `ไม่สามารถลบ "${parent.siteName}" ได้ เนื่องจากมีข้อมูลเชื่อมโยงอยู่ในระบบ: ${reasons.join(', ')} กรุณาเปลี่ยนสถานะเป็น Inactive แทน หรือลบข้อมูลที่เกี่ยวข้องออกก่อน`
+      );
+    }
+
     const deleted = await this.prisma.parentSite.delete({ where: { id } });
     await this.cacheManager.del('master_parent_sites');
     await this.cacheManager.del('master_site_info');
@@ -285,10 +334,12 @@ export class MasterDataService {
       siteName: s.siteName,
       parentSiteName: s.parentSite?.siteName || 'โรงพยาบาลเสนา',
       parentSiteId: s.parentSiteId,
+      parentSiteCode: s.parentSite?.siteCode || '',
+      parentSiteStatus: s.parentSite?.siteStatus || 'Active',
       siteType: s.siteType || 'Client Site',
       siteStatus: s.siteStatus || 'Active',
       lnPattern: s.lnPattern || '',
-      address: [s.address, s.subdistrict, s.district, s.province, s.zipcode].filter(Boolean).join(' ') || s.address || '',
+      address: s.address || '',
       subdistrict: s.subdistrict,
       district: s.district,
       province: s.province,
@@ -331,10 +382,30 @@ export class MasterDataService {
 
     // Resolve parent site
     let parentSiteId = data.parentSiteId;
-    if (!parentSiteId) {
-      const parent = await this.prisma.parentSite.findFirst();
+    if (!parentSiteId || parentSiteId === 'default') {
+      let parent: any = null;
+      if (data.parentSiteCode) {
+        parent = await this.prisma.parentSite.findFirst({ where: { siteCode: data.parentSiteCode } });
+      }
+      if (!parent && (data as any).parentSiteName) {
+        parent = await this.prisma.parentSite.findFirst({ where: { siteName: (data as any).parentSiteName } });
+      }
+      if (!parent) {
+        parent = await this.prisma.parentSite.findFirst({ where: { siteStatus: 'Active' } });
+      }
+      if (!parent) {
+        parent = await this.prisma.parentSite.findFirst();
+      }
       if (!parent) throw new BadRequestException('ไม่พบข้อมูล Parent Site ในระบบ');
       parentSiteId = parent.id;
+    }
+
+    // ตรวจสอบสถานะของแม่ข่าย: หากแม่ข่ายถูกระงับการใช้งาน ห้ามสร้างลูกข่ายในสถานะ Active
+    const parentSite = await this.prisma.parentSite.findUnique({ where: { id: parentSiteId } });
+    if (data.siteStatus !== 'Inactive' && (!parentSite || parentSite.siteStatus !== 'Active')) {
+      throw new BadRequestException(
+        `ไม่สามารถสร้างลูกข่ายในสถานะ Active ได้ เนื่องจากโรงพยาบาลแม่ข่าย "${parentSite?.siteName || 'ไม่ระบุ'}" อยู่ในสถานะระงับการใช้งาน (Inactive) กรุณาเลือกแม่ข่ายที่เปิดใช้งานอยู่`
+      );
     }
 
     const created = await this.prisma.clientSite.create({
@@ -362,16 +433,93 @@ export class MasterDataService {
   }
 
   async updateClientSite(id: string, data: any) {
+    const currentClient = await this.prisma.clientSite.findUnique({
+      where: { id },
+      include: { parentSite: true },
+    });
+    if (!currentClient) throw new NotFoundException('ไม่พบข้อมูล Client Site ในระบบ');
+
+    const allowed = [
+      'siteCode', 'siteName', 'siteType', 'siteStatus', 'lnPattern',
+      'parentSiteId', 'address', 'subdistrict', 'district', 'province',
+      'zipcode', 'hospitalFile', 'isoFile'
+    ];
+    const updateData: any = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) updateData[key] = data[key];
+    }
+    if (data.status !== undefined && updateData.siteStatus === undefined) {
+      updateData.siteStatus = data.status;
+    }
+
+    // 1. จัดการการย้ายสังกัด (Relocation): หากมีการส่ง parentSiteId หรือ parentSiteName/Code ใหม่
+    let targetParentId = updateData.parentSiteId;
+    if (!targetParentId && (data.parentSiteName || data.parentSiteCode)) {
+      const foundParent = await this.prisma.parentSite.findFirst({
+        where: {
+          OR: [
+            data.parentSiteCode ? { siteCode: data.parentSiteCode } : undefined,
+            data.parentSiteName ? { siteName: data.parentSiteName } : undefined,
+          ].filter(Boolean) as any,
+        },
+      });
+      if (foundParent) {
+        targetParentId = foundParent.id;
+        updateData.parentSiteId = targetParentId;
+      }
+    }
+
+    // 2. Activation Guard: ตรวจสอบสถานะของแม่ข่าย หากจะเปิดใช้งาน (Active) แม่ข่ายต้อง Active ด้วย
+    const effectiveParentId = targetParentId || currentClient.parentSiteId;
+    const effectiveParent = await this.prisma.parentSite.findUnique({
+      where: { id: effectiveParentId },
+    });
+
+    const isTargetActive = updateData.siteStatus === 'Active' || (updateData.siteStatus === undefined && currentClient.siteStatus === 'Active');
+    if (updateData.siteStatus === 'Active' || (targetParentId && targetParentId !== currentClient.parentSiteId && isTargetActive)) {
+      if (!effectiveParent || effectiveParent.siteStatus !== 'Active') {
+        throw new BadRequestException(
+          `ไม่สามารถเปิดใช้งานลูกข่าย "${currentClient.siteName}" ได้ เนื่องจากโรงพยาบาลแม่ข่าย "${effectiveParent?.siteName || 'ไม่ระบุ'}" อยู่ในสถานะระงับการใช้งาน (Inactive) กรุณาเปิดใช้งานแม่ข่ายก่อน หรือย้ายสังกัดไปยังแม่ข่ายที่เปิดใช้งาน`
+        );
+      }
+    }
+
     const updated = await this.prisma.clientSite.update({
       where: { id },
-      data,
+      data: updateData,
+      include: { parentSite: true },
     });
     await this.cacheManager.del('master_client_sites_all');
     await this.cacheManager.del('user_options');
-    return updated;
+    return {
+      ...updated,
+      parentSiteName: updated.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSiteCode: updated.parentSite?.siteCode || '',
+      parentSiteStatus: updated.parentSite?.siteStatus || 'Active',
+    };
   }
 
   async deleteClientSite(id: string) {
+    const client = await this.prisma.clientSite.findUnique({ where: { id } });
+    if (!client) throw new NotFoundException('ไม่พบข้อมูล Client Site ในระบบ');
+
+    const [orderCount, userCount, shipmentCount] = await Promise.all([
+      this.prisma.order.count({ where: { clientSiteId: id } }),
+      this.prisma.user.count({ where: { clientSiteId: id } }),
+      this.prisma.shipment.count({ where: { clientSiteId: id } }),
+    ]);
+
+    const reasons: string[] = [];
+    if (orderCount > 0) reasons.push(`ใบสั่งตรวจ (${orderCount} รายการ)`);
+    if (userCount > 0) reasons.push(`ผู้ใช้งาน (${userCount} บัญชี)`);
+    if (shipmentCount > 0) reasons.push(`การจัดส่ง (${shipmentCount} รายการ)`);
+
+    if (reasons.length > 0) {
+      throw new BadRequestException(
+        `ไม่สามารถลบ "${client.siteName}" ได้ เนื่องจากมีข้อมูลเชื่อมโยงอยู่ในระบบ: ${reasons.join(', ')} กรุณาเปลี่ยนสถานะเป็น Inactive แทน`
+      );
+    }
+
     const deleted = await this.prisma.clientSite.delete({ where: { id } });
     await this.cacheManager.del('master_client_sites_all');
     await this.cacheManager.del('user_options');
@@ -441,12 +589,33 @@ export class MasterDataService {
   }
 
   async updateWard(id: string, data: any) {
-    const updated = await this.prisma.ward.update({ where: { id }, data });
+    const allowed = [
+      'wardCode', 'wardName', 'wardStatus', 'hospitalFile',
+      'selectedSites', 'parentSiteId'
+    ];
+    const updateData: any = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) updateData[key] = data[key];
+    }
+    if (data.status !== undefined && updateData.wardStatus === undefined) {
+      updateData.wardStatus = data.status;
+    }
+    const updated = await this.prisma.ward.update({ where: { id }, data: updateData });
     await this.cacheManager.del('master_wards');
     return updated;
   }
 
   async deleteWard(id: string) {
+    const ward = await this.prisma.ward.findUnique({ where: { id } });
+    if (!ward) throw new NotFoundException('ไม่พบข้อมูล Ward ในระบบ');
+
+    const orderCount = await this.prisma.order.count({ where: { wardId: id } });
+    if (orderCount > 0) {
+      throw new BadRequestException(
+        `ไม่สามารถลบหอผู้ป่วย "${ward.wardName}" ได้ เนื่องจากมีใบสั่งตรวจ (${orderCount} รายการ) ผูกอยู่ กรุณาเปลี่ยนสถานะเป็น Inactive แทน`
+      );
+    }
+
     const deleted = await this.prisma.ward.delete({ where: { id } });
     await this.cacheManager.del('master_wards');
     return deleted;
@@ -497,12 +666,30 @@ export class MasterDataService {
   }
 
   async updateDepartment(id: string, data: any) {
-    const updated = await this.prisma.department.update({ where: { id }, data });
+    const allowed = ['departmentCode', 'departmentName', 'deptStatus', 'hospitalFile'];
+    const updateData: any = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) updateData[key] = data[key];
+    }
+    if (data.status !== undefined && updateData.deptStatus === undefined) {
+      updateData.deptStatus = data.status;
+    }
+    const updated = await this.prisma.department.update({ where: { id }, data: updateData });
     await this.cacheManager.del('master_departments');
     return updated;
   }
 
   async deleteDepartment(id: string) {
+    const dept = await this.prisma.department.findUnique({ where: { id } });
+    if (!dept) throw new NotFoundException('ไม่พบข้อมูลแผนกในระบบ');
+
+    const resultCount = await this.prisma.testResult.count({ where: { departmentId: id } });
+    if (resultCount > 0) {
+      throw new BadRequestException(
+        `ไม่สามารถลบแผนก "${dept.departmentName}" ได้ เนื่องจากมีผลตรวจวิเคราะห์ (${resultCount} รายการ) ผูกอยู่ กรุณาเปลี่ยนสถานะเป็น Inactive แทน`
+      );
+    }
+
     const deleted = await this.prisma.department.delete({ where: { id } });
     await this.cacheManager.del('master_departments');
     return deleted;
@@ -553,12 +740,30 @@ export class MasterDataService {
   }
 
   async updateSampleCondition(id: string, data: any) {
-    const updated = await this.prisma.sampleCondition.update({ where: { id }, data });
+    const allowed = ['conditionCode', 'conditionName', 'sampleStatus', 'isDefault', 'hospitalFile'];
+    const updateData: any = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) updateData[key] = data[key];
+    }
+    if (data.status !== undefined && updateData.sampleStatus === undefined) {
+      updateData.sampleStatus = data.status;
+    }
+    const updated = await this.prisma.sampleCondition.update({ where: { id }, data: updateData });
     await this.cacheManager.del('master_sample_conditions');
     return updated;
   }
 
   async deleteSampleCondition(id: string) {
+    const cond = await this.prisma.sampleCondition.findUnique({ where: { id } });
+    if (!cond) throw new NotFoundException('ไม่พบข้อมูลสภาพสิ่งส่งตรวจในระบบ');
+
+    const sampleCount = await this.prisma.sample.count({ where: { sampleConditionId: id } });
+    if (sampleCount > 0) {
+      throw new BadRequestException(
+        `ไม่สามารถลบ "${cond.conditionName}" ได้ เนื่องจากมีสิ่งส่งตรวจ (${sampleCount} รายการ) บันทึกสภาพนี้ไว้ กรุณาเปลี่ยนสถานะเป็น Inactive แทน`
+      );
+    }
+
     const deleted = await this.prisma.sampleCondition.delete({ where: { id } });
     await this.cacheManager.del('master_sample_conditions');
     return deleted;
@@ -580,7 +785,7 @@ export class MasterDataService {
         { titleCode: "05", titleNameTh: "เด็กหญิง", titleNameEn: "Girl", status: "Active" },
       ];
       for (const d of defaults) {
-        await this.prisma.title.create({ data: d }).catch(() => {});
+        await this.prisma.title.create({ data: d }).catch(() => { });
       }
       list = await this.prisma.title.findMany({ orderBy: { titleCode: 'asc' } });
     }
@@ -663,7 +868,7 @@ export class MasterDataService {
         { ethnicityCode: "OTHER", ethnicityNameTh: "อื่นๆ", ethnicityNameEn: "Other", status: "Active" },
       ];
       for (const d of defaults) {
-        await this.prisma.ethnicity.create({ data: d }).catch(() => {});
+        await this.prisma.ethnicity.create({ data: d }).catch(() => { });
       }
       list = await this.prisma.ethnicity.findMany({ orderBy: { ethnicityCode: 'asc' } });
     }
@@ -747,7 +952,7 @@ export class MasterDataService {
         { panelCode: "ELECTROLYTES", panelName: "Electrolytes Panel (Na, K, Cl, CO2)", specimenType: "Clotted Blood", department: "Chemistry", status: "Active" },
       ];
       for (const d of defaults) {
-        await this.prisma.testPanel.create({ data: d }).catch(() => {});
+        await this.prisma.testPanel.create({ data: d }).catch(() => { });
       }
       list = await this.prisma.testPanel.findMany({ orderBy: { panelCode: 'asc' } });
     }
@@ -812,6 +1017,22 @@ export class MasterDataService {
   }
 
   async deleteTestPanel(id: string) {
+    const panel = await this.prisma.testPanel.findUnique({ where: { id } });
+    if (panel) {
+      const linkedResults = await this.prisma.testResult.count({
+        where: {
+          OR: [
+            { testPanel: panel.panelCode },
+            { testPanel: panel.panelName },
+          ],
+        },
+      });
+      if (linkedResults > 0) {
+        throw new BadRequestException(
+          `ไม่สามารถลบชุดการตรวจ '${panel.panelName}' ได้ เนื่องจากมีประวัติผลการตรวจในระบบ (${linkedResults} รายการ) กรุณาเปลี่ยนสถานะเป็น Inactive แทน`
+        );
+      }
+    }
     await this.prisma.testPanel.delete({ where: { id } });
     return { success: true };
   }
@@ -842,7 +1063,7 @@ export class MasterDataService {
         const list = await (this.prisma as any).valueList.findMany({ orderBy: { code: 'asc' } });
         if (list && list.length > 0) return list;
       }
-    } catch {}
+    } catch { }
     return this.inMemoryValueLists;
   }
 
@@ -860,7 +1081,7 @@ export class MasterDataService {
         const created = await (this.prisma as any).valueList.create({ data: item });
         if (created) return created;
       }
-    } catch {}
+    } catch { }
     this.inMemoryValueLists.unshift(item);
     return item;
   }
@@ -878,7 +1099,7 @@ export class MasterDataService {
         });
         if (updated) return updated;
       }
-    } catch {}
+    } catch { }
     this.inMemoryValueLists = this.inMemoryValueLists.map((vl) =>
       vl.id === id ? { ...vl, ...data, updatedAt: new Date().toISOString() } : vl
     );
@@ -891,7 +1112,7 @@ export class MasterDataService {
         await (this.prisma as any).valueList.delete({ where: { id } });
         return { success: true };
       }
-    } catch {}
+    } catch { }
     this.inMemoryValueLists = this.inMemoryValueLists.filter((vl) => vl.id !== id);
     return { success: true };
   }
@@ -1003,7 +1224,7 @@ export class MasterDataService {
         const list = await (this.prisma as any).labTest.findMany({ orderBy: { code: 'asc' } });
         if (list && list.length > 0) return list;
       }
-    } catch {}
+    } catch { }
     return this.inMemoryTests;
   }
 
@@ -1023,7 +1244,7 @@ export class MasterDataService {
         const created = await (this.prisma as any).labTest.create({ data: item });
         if (created) return created;
       }
-    } catch {}
+    } catch { }
     this.inMemoryTests.unshift(item);
     return item;
   }
@@ -1043,7 +1264,7 @@ export class MasterDataService {
         });
         if (updated) return updated;
       }
-    } catch {}
+    } catch { }
     this.inMemoryTests = this.inMemoryTests.map((t) =>
       t.id === id ? { ...t, ...data, updatedAt: new Date().toISOString() } : t
     );
@@ -1051,12 +1272,37 @@ export class MasterDataService {
   }
 
   async deleteTest(id: string) {
+    let test: any = null;
+    try {
+      if ((this.prisma as any).labTest) {
+        test = await (this.prisma as any).labTest.findUnique({ where: { id } });
+      }
+    } catch { }
+    if (!test) {
+      test = this.inMemoryTests.find((t) => t.id === id);
+    }
+    if (test) {
+      const linkedResults = await this.prisma.testResult.count({
+        where: {
+          OR: [
+            { testName: test.name },
+            { testPanel: test.code },
+          ],
+        },
+      });
+      if (linkedResults > 0) {
+        throw new BadRequestException(
+          `ไม่สามารถลบรายการตรวจ '${test.name}' ได้ เนื่องจากมีประวัติผลการตรวจในระบบ (${linkedResults} รายการ) กรุณาเปลี่ยนสถานะเป็น Inactive แทน`
+        );
+      }
+    }
+
     try {
       if ((this.prisma as any).labTest) {
         await (this.prisma as any).labTest.delete({ where: { id } });
         return { success: true };
       }
-    } catch {}
+    } catch { }
     this.inMemoryTests = this.inMemoryTests.filter((t) => t.id !== id);
     return { success: true };
   }
@@ -1078,7 +1324,7 @@ export class MasterDataService {
         const list = await (this.prisma as any).testProfile.findMany({ orderBy: { code: 'asc' } });
         if (list && list.length > 0) return list;
       }
-    } catch {}
+    } catch { }
     return this.inMemoryProfiles;
   }
 
@@ -1098,7 +1344,7 @@ export class MasterDataService {
         const created = await (this.prisma as any).testProfile.create({ data: item });
         if (created) return created;
       }
-    } catch {}
+    } catch { }
     this.inMemoryProfiles.unshift(item);
     return item;
   }
@@ -1118,7 +1364,7 @@ export class MasterDataService {
         });
         if (updated) return updated;
       }
-    } catch {}
+    } catch { }
     this.inMemoryProfiles = this.inMemoryProfiles.map((p) =>
       p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p
     );
@@ -1131,7 +1377,7 @@ export class MasterDataService {
         await (this.prisma as any).testProfile.delete({ where: { id } });
         return { success: true };
       }
-    } catch {}
+    } catch { }
     this.inMemoryProfiles = this.inMemoryProfiles.filter((p) => p.id !== id);
     return { success: true };
   }
@@ -1241,7 +1487,7 @@ export class MasterDataService {
         const list = await (this.prisma as any).analyzer.findMany({ orderBy: { code: 'asc' } });
         if (list && list.length > 0) return list;
       }
-    } catch {}
+    } catch { }
     return this.inMemoryAnalyzers;
   }
 
@@ -1264,7 +1510,7 @@ export class MasterDataService {
         const created = await (this.prisma as any).analyzer.create({ data: item });
         if (created) return created;
       }
-    } catch {}
+    } catch { }
     this.inMemoryAnalyzers.unshift(item);
     return item;
   }
@@ -1287,7 +1533,7 @@ export class MasterDataService {
         });
         if (updated) return updated;
       }
-    } catch {}
+    } catch { }
     this.inMemoryAnalyzers = this.inMemoryAnalyzers.map((a) =>
       a.id === id ? { ...a, ...data, updatedAt: new Date().toISOString() } : a
     );
@@ -1295,12 +1541,37 @@ export class MasterDataService {
   }
 
   async deleteAnalyzer(id: string) {
+    let analyzer: any = null;
+    try {
+      if ((this.prisma as any).analyzer) {
+        analyzer = await (this.prisma as any).analyzer.findUnique({ where: { id } });
+      }
+    } catch { }
+    if (!analyzer) {
+      analyzer = this.inMemoryAnalyzers.find((a) => a.id === id);
+    }
+    if (analyzer) {
+      const linkedResults = await this.prisma.testResult.count({
+        where: {
+          OR: [
+            { instrumentName: analyzer.name },
+            { instrumentName: analyzer.code },
+          ],
+        },
+      });
+      if (linkedResults > 0) {
+        throw new BadRequestException(
+          `ไม่สามารถลบเครื่องวิเคราะห์ '${analyzer.name}' ได้ เนื่องจากมีผลตรวจที่เชื่อมโยงกับเครื่องตรวจนี้ (${linkedResults} รายการ) กรุณาเปลี่ยนสถานะเป็น Inactive แทน`
+        );
+      }
+    }
+
     try {
       if ((this.prisma as any).analyzer) {
         await (this.prisma as any).analyzer.delete({ where: { id } });
         return { success: true };
       }
-    } catch {}
+    } catch { }
     this.inMemoryAnalyzers = this.inMemoryAnalyzers.filter((a) => a.id !== id);
     return { success: true };
   }
