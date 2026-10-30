@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Headers, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Headers,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { MiddlewareService, CloudResultPayload } from './middleware.service';
@@ -19,13 +27,17 @@ export class MiddlewareController {
   private verifyAuth(apiKey?: string) {
     const requiredKey = this.expectedApiKey || 'healthdi_sec_live_sena00940';
     if (!apiKey || apiKey !== requiredKey) {
-      throw new UnauthorizedException('Invalid or missing X-Api-Key for Middleware Ingestion');
+      throw new UnauthorizedException(
+        'Invalid or missing X-Api-Key for Middleware Ingestion',
+      );
     }
   }
 
   @Public()
   @Get('orders')
-  @ApiOperation({ summary: 'Pull recent orders for local middleware ingestion' })
+  @ApiOperation({
+    summary: 'Pull recent orders for local middleware ingestion',
+  })
   async getOrders(
     @Headers('x-site-code') siteCode: string,
     @Headers('x-api-key') apiKey?: string,
@@ -37,25 +49,36 @@ export class MiddlewareController {
 
   @Public()
   @Post('results')
-  @ApiOperation({ summary: 'Receive batch test results delivered from local middleware outbox' })
+  @ApiOperation({
+    summary:
+      'Receive batch test results delivered from local middleware outbox',
+  })
   async receiveResults(
     @Headers('x-site-code') siteCode: string,
     @Headers('x-api-key') apiKey?: string,
     @Body() payload?: CloudResultPayload,
   ) {
     this.verifyAuth(apiKey);
-    return this.middlewareService.receiveResults(siteCode || '00940', payload as CloudResultPayload);
+    return this.middlewareService.receiveResults(
+      siteCode || '00940',
+      payload as CloudResultPayload,
+    );
   }
 
   @Public()
   @Post('heartbeat')
-  @ApiOperation({ summary: 'Record telemetry heartbeat from local middleware engine' })
+  @ApiOperation({
+    summary: 'Record telemetry heartbeat from local middleware engine',
+  })
   async heartbeat(
     @Headers('x-site-code') siteCode: string,
     @Headers('x-api-key') apiKey?: string,
     @Body() telemetry?: any,
   ) {
     this.verifyAuth(apiKey);
-    return this.middlewareService.recordHeartbeat(siteCode || '00940', telemetry);
+    return this.middlewareService.recordHeartbeat(
+      siteCode || '00940',
+      telemetry,
+    );
   }
 }

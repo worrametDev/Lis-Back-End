@@ -43,8 +43,21 @@ export class MiddlewareService {
     });
 
     const whereClause: any = {
-      status: { in: [OrderStatus.REGISTERED, OrderStatus.RECEIVED, OrderStatus.IN_PROCESS] },
+      status: {
+        in: [
+          OrderStatus.REGISTERED,
+          OrderStatus.RECEIVED,
+          OrderStatus.IN_PROCESS,
+        ],
+      },
     };
+
+    if (since) {
+      const sinceDate = new Date(since);
+      if (!isNaN(sinceDate.getTime())) {
+        whereClause.updatedAt = { gte: sinceDate };
+      }
+    }
 
     if (parentSite) {
       whereClause.parentSiteId = parentSite.id;
@@ -65,10 +78,19 @@ export class MiddlewareService {
         const specimenId = `${s.labNumber}-${suffix}`;
 
         // Extract test items from JSON or sample
-        const orderItems = Array.isArray(o.orderItems) ? (o.orderItems as any[]) : [];
-        const tests = orderItems.length > 0
-          ? orderItems.map((item) => ({ testCode: item.testCode || item.code || 'CHOL', status: 'ACTIVE' }))
-          : [{ testCode: 'CHOL', status: 'ACTIVE' }, { testCode: 'GLU', status: 'ACTIVE' }];
+        const orderItems = Array.isArray(o.orderItems)
+          ? (o.orderItems as any[])
+          : [];
+        const tests =
+          orderItems.length > 0
+            ? orderItems.map((item) => ({
+                testCode: item.testCode || item.code || 'CHOL',
+                status: 'ACTIVE',
+              }))
+            : [
+                { testCode: 'CHOL', status: 'ACTIVE' },
+                { testCode: 'GLU', status: 'ACTIVE' },
+              ];
 
         return {
           labNumber: s.labNumber,
@@ -106,16 +128,15 @@ export class MiddlewareService {
       throw new ConflictException(`Message ${messageId} already processed`);
     }
 
-    this.logger.log(`Received ${results.length} results for Specimen ${specimenId} from ${instrument.model}`);
+    this.logger.log(
+      `Received ${results.length} results for Specimen ${specimenId} from ${instrument.model}`,
+    );
 
     // Find sample by labNumber
     const labNumber = specimenId.split('-')[0];
     const sample = await this.prisma.sample.findFirst({
       where: {
-        OR: [
-          { labNumber },
-          { barcode: specimenId },
-        ],
+        OR: [{ labNumber }, { barcode: specimenId }],
       },
       include: {
         testResults: true,
@@ -132,9 +153,11 @@ export class MiddlewareService {
         results.map(async (res) => {
           // Map flag
           let flagEnum: ResultFlag = ResultFlag.NORMAL;
-          if (res.flag === 'H' || res.flag === 'HIGH') flagEnum = ResultFlag.HIGH;
+          if (res.flag === 'H' || res.flag === 'HIGH')
+            flagEnum = ResultFlag.HIGH;
           if (res.flag === 'L' || res.flag === 'LOW') flagEnum = ResultFlag.LOW;
-          if (res.flag === 'A' || res.flag === 'ABNORMAL') flagEnum = ResultFlag.ABNORMAL;
+          if (res.flag === 'A' || res.flag === 'ABNORMAL')
+            flagEnum = ResultFlag.ABNORMAL;
 
           // Check if test result already exists for this testName
           const existingResult = sample.testResults.find(
@@ -184,7 +207,9 @@ export class MiddlewareService {
       await this.cacheManager.del(`workstation_results_${sample.id}`);
       await this.cacheManager.del('dashboard_stats');
     } else {
-      this.logger.warn(`Sample with labNumber ${labNumber} not found in Cloud LIS database. Result recorded as unlinked.`);
+      this.logger.warn(
+        `Sample with labNumber ${labNumber} not found in Cloud LIS database. Result recorded as unlinked.`,
+      );
     }
 
     this.processedMessageIds.add(messageId);
@@ -196,7 +221,9 @@ export class MiddlewareService {
   }
 
   recordHeartbeat(siteCode: string, telemetry: any) {
-    this.logger.debug(`Heartbeat from Site ${siteCode}: channels=${telemetry.channelsCount}, pending=${telemetry.pendingOutboxCount}`);
+    this.logger.debug(
+      `Heartbeat from Site ${siteCode}: channels=${telemetry.channelsCount}, pending=${telemetry.pendingOutboxCount}`,
+    );
     return {
       status: 'OK',
       serverTime: new Date().toISOString(),

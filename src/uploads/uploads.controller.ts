@@ -67,11 +67,16 @@ export class UploadsController {
       'application/pdf',
     ];
     if (!allowedMimeTypes.includes(file.mimetype.toLowerCase())) {
-      throw new BadRequestException('ประเภทไฟล์ไม่ถูกต้อง อนุญาตเฉพาะรูปภาพ (PNG, JPG, WEBP, SVG) และเอกสาร PDF เท่านั้น');
+      throw new BadRequestException(
+        'ประเภทไฟล์ไม่ถูกต้อง อนุญาตเฉพาะรูปภาพ (PNG, JPG, WEBP, SVG) และเอกสาร PDF เท่านั้น',
+      );
     }
 
     // Sanitize extension and generate cryptographically clean name
-    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
+    const ext = path
+      .extname(file.originalname)
+      .toLowerCase()
+      .replace(/[^a-z0-9.]/g, '');
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const filename = `${file.fieldname}-${uniqueSuffix}${ext}`;
 

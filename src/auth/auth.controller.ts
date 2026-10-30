@@ -44,7 +44,8 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('login')
   @ApiOperation({
-    summary: 'เข้าสู่ระบบ (Login) และออก HttpOnly Cookie + JWT Token ตามมาตรฐานความปลอดภัยสูงสุด',
+    summary:
+      'เข้าสู่ระบบ (Login) และออก HttpOnly Cookie + JWT Token ตามมาตรฐานความปลอดภัยสูงสุด',
   })
   @ApiBody({
     schema: {
@@ -66,9 +67,13 @@ export class AuthController {
   })
   @ApiResponse({
     status: 200,
-    description: 'เข้าสู่ระบบสำเร็จ ตั้งค่า HttpOnly Cookie และคืนค่าข้อมูลผู้ใช้',
+    description:
+      'เข้าสู่ระบบสำเร็จ ตั้งค่า HttpOnly Cookie และคืนค่าข้อมูลผู้ใช้',
   })
-  @ApiResponse({ status: 401, description: 'Username หรือ Password ไม่ถูกต้อง' })
+  @ApiResponse({
+    status: 401,
+    description: 'Username หรือ Password ไม่ถูกต้อง',
+  })
   async login(
     @Body() body: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -115,7 +120,8 @@ export class AuthController {
   @Get('me')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'ตรวจสอบโปรไฟล์ผู้ใช้งานปัจจุบัน (รองรับทั้ง HttpOnly Cookie และ Bearer Token)',
+    summary:
+      'ตรวจสอบโปรไฟล์ผู้ใช้งานปัจจุบัน (รองรับทั้ง HttpOnly Cookie และ Bearer Token)',
   })
   @ApiResponse({ status: 200, description: 'คืนค่าข้อมูลผู้ใช้งาน' })
   @ApiResponse({ status: 401, description: 'Token ไม่ถูกต้องหรือหมดอายุ' })
@@ -132,7 +138,9 @@ export class AuthController {
     }
 
     if (!token) {
-      throw new UnauthorizedException('ไม่พบ Token ยืนยันตัวตน (Missing Token)');
+      throw new UnauthorizedException(
+        'ไม่พบ Token ยืนยันตัวตน (Missing Token)',
+      );
     }
 
     try {

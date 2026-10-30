@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  Inject,
+} from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
@@ -31,7 +36,13 @@ export class OrdersService {
       where.OR = [
         { hn: { contains: query.search, mode: 'insensitive' } },
         { patientName: { contains: query.search, mode: 'insensitive' } },
-        { samples: { some: { labNumber: { contains: query.search, mode: 'insensitive' } } } },
+        {
+          samples: {
+            some: {
+              labNumber: { contains: query.search, mode: 'insensitive' },
+            },
+          },
+        },
       ];
     }
     if (query?.createdFrom || query?.createdTo) {
@@ -84,7 +95,8 @@ export class OrdersService {
               year: 'numeric',
             })
           : '-',
-        clientSite: o.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+        clientSite:
+          o.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
         clientSiteId: o.clientSiteId,
         parentSite: o.parentSite?.siteName || 'โรงพยาบาลเสนา',
         parentSiteId: o.parentSiteId,
@@ -114,7 +126,11 @@ export class OrdersService {
         idCard: o.idCard || '',
         passportNo: o.passportNo || '',
         specimenType: firstSample?.specimenType || 'EDTA Blood',
-        testName: firstSample?.profileTestName || o.testProfile || o.testPanel || 'Complete Blood Count (CBC)',
+        testName:
+          firstSample?.profileTestName ||
+          o.testProfile ||
+          o.testPanel ||
+          'Complete Blood Count (CBC)',
         orderItems: o.orderItems || [],
         samplesCount: o.samples.length,
       };
@@ -207,16 +223,24 @@ export class OrdersService {
     // Resolve client site & parent site
     let clientSite = null;
     if (data.clientSiteId) {
-      clientSite = await this.prisma.clientSite.findUnique({ where: { id: data.clientSiteId } });
+      clientSite = await this.prisma.clientSite.findUnique({
+        where: { id: data.clientSiteId },
+      });
     }
-    if (!clientSite && (data.siteCode || data.clientSiteName || data.clientSite || data.siteName)) {
+    if (
+      !clientSite &&
+      (data.siteCode || data.clientSiteName || data.clientSite || data.siteName)
+    ) {
       const targetCode = data.siteCode;
-      const targetName = data.clientSiteName || data.clientSite || data.siteName;
+      const targetName =
+        data.clientSiteName || data.clientSite || data.siteName;
       clientSite = await this.prisma.clientSite.findFirst({
         where: {
           OR: [
             targetCode ? { siteCode: targetCode } : {},
-            targetName ? { siteName: { contains: targetName, mode: 'insensitive' } } : {},
+            targetName
+              ? { siteName: { contains: targetName, mode: 'insensitive' } }
+              : {},
           ],
         },
       });
@@ -255,7 +279,11 @@ export class OrdersService {
         : [
             {
               no: 1,
-              testCode: data.testProfile || data.testPanel || data.selectedTests?.[0] || 'CBC',
+              testCode:
+                data.testProfile ||
+                data.testPanel ||
+                data.selectedTests?.[0] ||
+                'CBC',
               testName: profileTestName,
               specimenType: data.specimenType || 'EDTA Blood',
               department: 'Hematology',
@@ -316,7 +344,8 @@ export class OrdersService {
     for (let i = 0; i < rawOrderItems.length; i++) {
       const item = rawOrderItems[i];
       const itemLabNumber = `${datePrefix}${randomBase + i}`;
-      const itemSpecimen = item.specimenType || data.specimenType || 'EDTA Blood';
+      const itemSpecimen =
+        item.specimenType || data.specimenType || 'EDTA Blood';
       const itemTestName = item.testName || item.testCode || profileTestName;
 
       const sample = await this.prisma.sample.create({
@@ -340,11 +369,56 @@ export class OrdersService {
           itemTestName.includes('Complete Blood Count')
         ) {
           const cbcSubTests = [
-            { testPanel: 'CBC', testName: 'WBC Count', unit: '10^3 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
-            { testPanel: 'CBC', testName: 'RBC Count', unit: '10^6 cell/ul', referenceRange: '4.00 - 10.00', testResult: '4.52', flag: ResultFlag.NORMAL, lastResult: '4.16', repeatResult: '4.48' },
-            { testPanel: 'CBC', testName: 'Hemoglobin', unit: 'g/dL', referenceRange: '12.00 - 16.00', testResult: '14.2', flag: ResultFlag.NORMAL, lastResult: '13.8', repeatResult: '14.1' },
-            { testPanel: 'CBC', testName: 'Hematocrit', unit: '%', referenceRange: '36.0 - 48.0', testResult: '42.5', flag: ResultFlag.NORMAL, lastResult: '41.0', repeatResult: '42.3' },
-            { testPanel: 'CBC', testName: 'Platelet Count', unit: '10^3 cell/ul', referenceRange: '140 - 400', testResult: '285', flag: ResultFlag.NORMAL, lastResult: '270', repeatResult: '280' },
+            {
+              testPanel: 'CBC',
+              testName: 'WBC Count',
+              unit: '10^3 cell/ul',
+              referenceRange: '4.00 - 10.00',
+              testResult: '4.52',
+              flag: ResultFlag.NORMAL,
+              lastResult: '4.16',
+              repeatResult: '4.48',
+            },
+            {
+              testPanel: 'CBC',
+              testName: 'RBC Count',
+              unit: '10^6 cell/ul',
+              referenceRange: '4.00 - 10.00',
+              testResult: '4.52',
+              flag: ResultFlag.NORMAL,
+              lastResult: '4.16',
+              repeatResult: '4.48',
+            },
+            {
+              testPanel: 'CBC',
+              testName: 'Hemoglobin',
+              unit: 'g/dL',
+              referenceRange: '12.00 - 16.00',
+              testResult: '14.2',
+              flag: ResultFlag.NORMAL,
+              lastResult: '13.8',
+              repeatResult: '14.1',
+            },
+            {
+              testPanel: 'CBC',
+              testName: 'Hematocrit',
+              unit: '%',
+              referenceRange: '36.0 - 48.0',
+              testResult: '42.5',
+              flag: ResultFlag.NORMAL,
+              lastResult: '41.0',
+              repeatResult: '42.3',
+            },
+            {
+              testPanel: 'CBC',
+              testName: 'Platelet Count',
+              unit: '10^3 cell/ul',
+              referenceRange: '140 - 400',
+              testResult: '285',
+              flag: ResultFlag.NORMAL,
+              lastResult: '270',
+              repeatResult: '280',
+            },
           ];
           for (const sub of cbcSubTests) {
             await this.prisma.testResult.create({
@@ -395,13 +469,15 @@ export class OrdersService {
       status: 'Registered',
       created: order.createdAt.toLocaleDateString('th-TH'),
       received: '-',
-      clientSite: order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      clientSite:
+        order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
       clientSiteId: order.clientSiteId,
       hn: order.hn,
       labNo: firstSample?.labNumber || `${datePrefix}${randomBase}`,
       sampleId: firstSample?.id,
       patientName: order.patientName,
-      specimenType: firstSample?.specimenType || data.specimenType || 'EDTA Blood',
+      specimenType:
+        firstSample?.specimenType || data.specimenType || 'EDTA Blood',
       testName: firstSample?.profileTestName || profileTestName,
       ward: order.ward?.wardName || order.patientType || 'OPD',
       urgentStatus: order.urgentStatus || 'NORMAL',
@@ -430,4 +506,3 @@ export class OrdersService {
     });
   }
 }
-

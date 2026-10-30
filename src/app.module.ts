@@ -56,4 +56,3 @@ import { MiddlewareModule } from './middleware/middleware.module';
   ],
 })
 export class AppModule {}
-

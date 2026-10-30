@@ -1,5 +1,22 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiQuery,
+  ApiParam,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { MasterDataService } from './master-data.service';
 import { Public } from '../auth/public.decorator';
 
@@ -10,7 +27,9 @@ export class MasterDataController {
   constructor(private readonly masterDataService: MasterDataService) {}
 
   @Get('master-data/cache-debug')
-  @ApiOperation({ summary: 'ดูสถานะและข้อมูลใน Cache ของ Master Data (Developer Diagnostics)' })
+  @ApiOperation({
+    summary: 'ดูสถานะและข้อมูลใน Cache ของ Master Data (Developer Diagnostics)',
+  })
   getCacheDebug() {
     return this.masterDataService.getCacheStats();
   }
@@ -27,7 +46,10 @@ export class MasterDataController {
 
   @Public()
   @Get('master-data/health')
-  @ApiOperation({ summary: 'ตรวจเช็คสถานะการเชื่อมต่อฐานข้อมูล PostgreSQL จริง (Live DB Health Check)' })
+  @ApiOperation({
+    summary:
+      'ตรวจเช็คสถานะการเชื่อมต่อฐานข้อมูล PostgreSQL จริง (Live DB Health Check)',
+  })
   @ApiResponse({ status: 200, description: 'สถานะการเชื่อมต่อฐานข้อมูล' })
   checkHealth() {
     return this.masterDataService.checkHealth();
@@ -35,27 +57,49 @@ export class MasterDataController {
 
   @Public()
   @Get('master-data/site-info')
-  @ApiOperation({ summary: 'ดึงข้อมูลโรงพยาบาล/Site ติดตั้งของระบบ (Installation Site Info for Login & Leftbar)' })
-  @ApiResponse({ status: 200, description: 'คืนค่าข้อมูลโรงพยาบาลที่ติดตั้งระบบ' })
+  @ApiOperation({
+    summary:
+      'ดึงข้อมูลโรงพยาบาล/Site ติดตั้งของระบบ (Installation Site Info for Login & Leftbar)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'คืนค่าข้อมูลโรงพยาบาลที่ติดตั้งระบบ',
+  })
   getSiteInfo() {
     return this.masterDataService.getSiteInfo();
   }
 
   @Put('master-data/site-info')
-  @ApiOperation({ summary: 'แก้ไขข้อมูลโรงพยาบาล/Site ติดตั้งของระบบ (System Administrator Only)' })
-  @ApiResponse({ status: 200, description: 'บันทึกข้อมูลโรงพยาบาลเรียบร้อยแล้ว' })
+  @ApiOperation({
+    summary:
+      'แก้ไขข้อมูลโรงพยาบาล/Site ติดตั้งของระบบ (System Administrator Only)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'บันทึกข้อมูลโรงพยาบาลเรียบร้อยแล้ว',
+  })
   updateSiteInfo(@Body() body: any) {
     return this.masterDataService.updateSiteInfo(body);
   }
 
   @Post('parent-sites')
-  @ApiOperation({ summary: 'สร้าง Parent Site ใหม่ (Create New Parent Site Modal)' })
+  @ApiOperation({
+    summary: 'สร้าง Parent Site ใหม่ (Create New Parent Site Modal)',
+  })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        siteCode: { type: 'string', example: '00940', description: 'รหัสโรงพยาบาลแม่ข่าย (SITE CODE)' },
-        siteName: { type: 'string', example: 'โรงพยาบาลเสนา', description: 'ชื่อโรงพยาบาลแม่ข่าย (SITE NAME)' },
+        siteCode: {
+          type: 'string',
+          example: '00940',
+          description: 'รหัสโรงพยาบาลแม่ข่าย (SITE CODE)',
+        },
+        siteName: {
+          type: 'string',
+          example: 'โรงพยาบาลเสนา',
+          description: 'ชื่อโรงพยาบาลแม่ข่าย (SITE NAME)',
+        },
         siteType: { type: 'string', example: 'Parent Site' },
         siteStatus: { type: 'string', example: 'Active' },
         lnPattern: { type: 'string', example: 'LN-69{YY}{MM}{DD}{SEQ}' },
@@ -91,19 +135,33 @@ export class MasterDataController {
   // ==========================================
   @Get('client-sites')
   @ApiOperation({ summary: 'ดึงรายการ Client Sites (รพ.สต. เครือข่ายลูกข่าย)' })
-  @ApiQuery({ name: 'parentSiteId', required: false, description: 'กรองตาม Parent Site ID' })
+  @ApiQuery({
+    name: 'parentSiteId',
+    required: false,
+    description: 'กรองตาม Parent Site ID',
+  })
   findAllClientSites(@Query('parentSiteId') parentSiteId?: string) {
     return this.masterDataService.findAllClientSites(parentSiteId);
   }
 
   @Post('client-sites')
-  @ApiOperation({ summary: 'สร้าง Client Site ใหม่ (Create New Client Site Modal)' })
+  @ApiOperation({
+    summary: 'สร้าง Client Site ใหม่ (Create New Client Site Modal)',
+  })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        siteCode: { type: 'string', example: '00940-03', description: 'SITE CODE' },
-        siteName: { type: 'string', example: 'โรงพยาบาลส่งเสริมสุขภาพตำบลบ้านแพน', description: 'SITE NAME' },
+        siteCode: {
+          type: 'string',
+          example: '00940-03',
+          description: 'SITE CODE',
+        },
+        siteName: {
+          type: 'string',
+          example: 'โรงพยาบาลส่งเสริมสุขภาพตำบลบ้านแพน',
+          description: 'SITE NAME',
+        },
         siteType: { type: 'string', example: 'Client Site' },
         siteStatus: { type: 'string', example: 'Active' },
         lnPattern: { type: 'string', example: 'LN-BP{SEQ}' },
@@ -150,8 +208,16 @@ export class MasterDataController {
     schema: {
       type: 'object',
       properties: {
-        wardCode: { type: 'string', example: 'LR', description: 'WARD CODE (เช่น LR, ICU, OPD)' },
-        wardName: { type: 'string', example: 'ห้องคลอด (Labor Room)', description: 'WARD NAME' },
+        wardCode: {
+          type: 'string',
+          example: 'LR',
+          description: 'WARD CODE (เช่น LR, ICU, OPD)',
+        },
+        wardName: {
+          type: 'string',
+          example: 'ห้องคลอด (Labor Room)',
+          description: 'WARD NAME',
+        },
         wardStatus: { type: 'string', example: 'Active' },
       },
       required: ['wardCode', 'wardName'],
@@ -179,19 +245,31 @@ export class MasterDataController {
   // 4. DEPARTMENTS
   // ==========================================
   @Get('departments')
-  @ApiOperation({ summary: 'ดึงรายการแผนกห้องปฏิบัติการ (Departments: HEM, CHM, IMM)' })
+  @ApiOperation({
+    summary: 'ดึงรายการแผนกห้องปฏิบัติการ (Departments: HEM, CHM, IMM)',
+  })
   findAllDepartments() {
     return this.masterDataService.findAllDepartments();
   }
 
   @Post('departments')
-  @ApiOperation({ summary: 'สร้าง Department ใหม่ (Create New Department Modal)' })
+  @ApiOperation({
+    summary: 'สร้าง Department ใหม่ (Create New Department Modal)',
+  })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        departmentCode: { type: 'string', example: 'MB', description: 'DEPARTMENT CODE' },
-        departmentName: { type: 'string', example: 'DEPT: MICROBIOLOGY', description: 'DEPARTMENT NAME' },
+        departmentCode: {
+          type: 'string',
+          example: 'MB',
+          description: 'DEPARTMENT CODE',
+        },
+        departmentName: {
+          type: 'string',
+          example: 'DEPT: MICROBIOLOGY',
+          description: 'DEPARTMENT NAME',
+        },
         deptStatus: { type: 'string', example: 'Active' },
       },
       required: ['departmentCode', 'departmentName'],
@@ -219,21 +297,38 @@ export class MasterDataController {
   // 5. SAMPLE CONDITIONS
   // ==========================================
   @Get('sample-conditions')
-  @ApiOperation({ summary: 'ดึงรายการสภาพสิ่งส่งตรวจ (Sample Conditions: Normal, Clot, Hemolysis)' })
+  @ApiOperation({
+    summary:
+      'ดึงรายการสภาพสิ่งส่งตรวจ (Sample Conditions: Normal, Clot, Hemolysis)',
+  })
   findAllSampleConditions() {
     return this.masterDataService.findAllSampleConditions();
   }
 
   @Post('sample-conditions')
-  @ApiOperation({ summary: 'สร้าง Sample Condition ใหม่ (Create New Sample Condition Modal)' })
+  @ApiOperation({
+    summary: 'สร้าง Sample Condition ใหม่ (Create New Sample Condition Modal)',
+  })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        conditionCode: { type: 'string', example: 'ICTERIC', description: 'CONDITION CODE' },
-        conditionName: { type: 'string', example: 'สีเหลืองเข้ม/ดีซ่าน (Icteric)', description: 'CONDITION NAME' },
+        conditionCode: {
+          type: 'string',
+          example: 'ICTERIC',
+          description: 'CONDITION CODE',
+        },
+        conditionName: {
+          type: 'string',
+          example: 'สีเหลืองเข้ม/ดีซ่าน (Icteric)',
+          description: 'CONDITION NAME',
+        },
         sampleStatus: { type: 'string', example: 'Active' },
-        isDefault: { type: 'boolean', example: false, description: 'ตั้งเป็นค่าเริ่มต้น' },
+        isDefault: {
+          type: 'boolean',
+          example: false,
+          description: 'ตั้งเป็นค่าเริ่มต้น',
+        },
       },
       required: ['conditionCode', 'conditionName'],
     },
@@ -422,13 +517,18 @@ export class MasterDataController {
   // 12. ANALYZERS (เครื่องตรวจวิเคราะห์อัตโนมัติ)
   // ==========================================
   @Get('analyzers')
-  @ApiOperation({ summary: 'ดึงรายการเครื่องตรวจวิเคราะห์ (Analyzers) ทั้งหมดพร้อม Order Codes & Result Codes' })
+  @ApiOperation({
+    summary:
+      'ดึงรายการเครื่องตรวจวิเคราะห์ (Analyzers) ทั้งหมดพร้อม Order Codes & Result Codes',
+  })
   findAllAnalyzers() {
     return this.masterDataService.findAllAnalyzers();
   }
 
   @Post('analyzers')
-  @ApiOperation({ summary: 'สร้างเครื่องตรวจวิเคราะห์ใหม่พร้อม Order Codes & Result Codes' })
+  @ApiOperation({
+    summary: 'สร้างเครื่องตรวจวิเคราะห์ใหม่พร้อม Order Codes & Result Codes',
+  })
   createAnalyzer(@Body() body: any) {
     return this.masterDataService.createAnalyzer(body);
   }
@@ -445,5 +545,3 @@ export class MasterDataController {
     return this.masterDataService.deleteAnalyzer(id);
   }
 }
-
-
