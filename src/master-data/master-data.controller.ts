@@ -412,6 +412,12 @@ export class MasterDataController {
     return this.masterDataService.updateTestProfile(id, body);
   }
 
+  @Delete('test-profiles/:id')
+  @ApiOperation({ summary: 'ลบ Test Profile' })
+  deleteTestProfile(@Param('id') id: string) {
+    return this.masterDataService.deleteTestProfile(id);
+  }
+
   // ==========================================
   // 12. ANALYZERS (เครื่องตรวจวิเคราะห์อัตโนมัติ)
   // ==========================================
