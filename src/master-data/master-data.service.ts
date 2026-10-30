@@ -238,6 +238,8 @@ export class MasterDataService {
     });
 
     await this.cacheManager.del('master_parent_sites');
+    await this.cacheManager.del('master_client_sites_all');
+    await this.cacheManager.del('master_wards');
     await this.cacheManager.del('master_site_info');
     await this.cacheManager.del('user_options');
     return created;
@@ -271,10 +273,12 @@ export class MasterDataService {
         where: { parentSiteId: id },
         data: { wardStatus: 'Inactive' },
       });
-      await this.cacheManager.del('master_client_sites_all');
-      await this.cacheManager.del('master_wards');
     }
 
+    // ล้าง Cache ที่เกี่ยวข้องทั้งหมดเสมอ (ทั้ง Client Sites, Wards, Parent Sites) ไม่ว่าจะเปลี่ยนสถานะเป็น Active/Inactive หรือแก้ไขชื่อ/รหัส
+    await this.cacheManager.del('master_client_sites_all');
+    await this.cacheManager.del(`master_client_sites_${id}`);
+    await this.cacheManager.del('master_wards');
     await this.cacheManager.del('master_parent_sites');
     await this.cacheManager.del('master_site_info');
     await this.cacheManager.del('user_options');
@@ -306,6 +310,9 @@ export class MasterDataService {
 
     const deleted = await this.prisma.parentSite.delete({ where: { id } });
     await this.cacheManager.del('master_parent_sites');
+    await this.cacheManager.del('master_client_sites_all');
+    await this.cacheManager.del(`master_client_sites_${id}`);
+    await this.cacheManager.del('master_wards');
     await this.cacheManager.del('master_site_info');
     await this.cacheManager.del('user_options');
     return deleted;
