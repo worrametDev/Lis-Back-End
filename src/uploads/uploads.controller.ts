@@ -130,12 +130,32 @@ export class UploadsController {
     if (supabaseUrl && supabaseKey) {
       try {
         const supabase = createClient(supabaseUrl, supabaseKey);
-        const { error } = await supabase.storage
-          .from(bucket)
-          .upload(filename, storedBuffer, {
+        const upload = () =>
+          supabase.storage.from(bucket).upload(filename, storedBuffer, {
             contentType: storedMimeType,
             upsert: true,
           });
+        let { error } = await upload();
+
+        // A fresh Supabase project does not contain our storage bucket yet.
+        // Create it on first use when the configured key has admin permission,
+        // then retry the exact same upload once.
+        if (error && /bucket not found/i.test(error.message)) {
+          const { error: createError } = await supabase.storage.createBucket(
+            bucket,
+            {
+              public: true,
+              fileSizeLimit: 10 * 1024 * 1024,
+              allowedMimeTypes,
+            },
+          );
+          if (createError && !/already exists/i.test(createError.message)) {
+            throw new BadRequestException(
+              `ไม่พบ Supabase bucket "${bucket}" และสร้างอัตโนมัติไม่ได้: ${createError.message} กรุณาสร้าง bucket แบบ Public หรือกำหนด SUPABASE_SERVICE_ROLE_KEY`,
+            );
+          }
+          ({ error } = await upload());
+        }
 
         if (error) {
           throw new BadRequestException(

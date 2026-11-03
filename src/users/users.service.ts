@@ -17,6 +17,15 @@ export class UsersService {
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
+  private formatClientSite(
+    site?: { siteCode?: string | null; siteName?: string | null } | null,
+  ): string {
+    if (!site?.siteName) return '';
+    return site.siteCode
+      ? `${site.siteCode} : ${site.siteName}`
+      : site.siteName;
+  }
+
   private mapRole(roleString?: string): UserRole {
     if (!roleString) return UserRole.SYSTEM_ADMINISTRATOR;
     const clean = roleString.trim().toUpperCase();
@@ -77,9 +86,7 @@ export class UsersService {
       organization: u.organization || '',
       userRole: u.userRole.replace(/_/g, ' '),
       role: u.userRole.replace(/_/g, ' '),
-      clientSite: u.clientSite
-        ? (u.clientSite.siteCode ? `${u.clientSite.siteCode} : ${u.clientSite.siteName}` : u.clientSite.siteName)
-        : '',
+      clientSite: this.formatClientSite(u.clientSite),
       clientSiteId: u.clientSiteId || '',
       clientSiteCode: u.clientSite?.siteCode || '',
       clientSiteName: u.clientSite?.siteName || '',
@@ -167,9 +174,7 @@ export class UsersService {
       fullname: `${user.firstName} ${user.lastName}`.trim(),
       role: user.userRole.replace(/_/g, ' '),
       status: user.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
-      clientSite: user.clientSite
-        ? (user.clientSite.siteCode ? `${user.clientSite.siteCode} : ${user.clientSite.siteName}` : user.clientSite.siteName)
-        : '',
+      clientSite: this.formatClientSite(user.clientSite),
       clientSiteId: user.clientSiteId || '',
       clientSiteCode: user.clientSite?.siteCode || '',
       clientSiteName: user.clientSite?.siteName || '',
@@ -312,11 +317,10 @@ export class UsersService {
       organization: newUser.organization || '',
       userRole: newUser.userRole.replace(/_/g, ' '),
       role: newUser.userRole.replace(/_/g, ' '),
-      clientSite:
-        newUser.clientSite?.siteName ||
-        newUser.parentSite?.siteName ||
-        'โรงพยาบาลเสนา',
+      clientSite: this.formatClientSite(newUser.clientSite),
       clientSiteId: newUser.clientSiteId || '',
+      clientSiteCode: newUser.clientSite?.siteCode || '',
+      clientSiteName: newUser.clientSite?.siteName || '',
       parentSite: newUser.parentSite?.siteName || 'โรงพยาบาลเสนา',
       parentSiteId: newUser.parentSiteId || '',
       province: newUser.province || '',
@@ -444,11 +448,10 @@ export class UsersService {
       organization: updated.organization || '',
       userRole: updated.userRole.replace(/_/g, ' '),
       role: updated.userRole.replace(/_/g, ' '),
-      clientSite:
-        updated.clientSite?.siteName ||
-        updated.parentSite?.siteName ||
-        'โรงพยาบาลเสนา',
+      clientSite: this.formatClientSite(updated.clientSite),
       clientSiteId: updated.clientSiteId || '',
+      clientSiteCode: updated.clientSite?.siteCode || '',
+      clientSiteName: updated.clientSite?.siteName || '',
       parentSite: updated.parentSite?.siteName || 'โรงพยาบาลเสนา',
       parentSiteId: updated.parentSiteId || '',
       province: updated.province || '',
