@@ -20,10 +20,10 @@ export class WorkstationService {
       where: {
         status: {
           in: [
-            SpecimenStatus.REGISTERED,
             SpecimenStatus.RECEIVED,
             SpecimenStatus.IN_PROCESS,
             SpecimenStatus.VERIFIED,
+            SpecimenStatus.APPROVED,
           ],
         },
       },
@@ -31,16 +31,17 @@ export class WorkstationService {
         order: {
           include: {
             clientSite: true,
+            parentSite: true,
             ward: true,
             samples: true,
           },
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take: 200,
     });
 
-    const result = samples.map((s, idx) => {
+    const result = await Promise.all(samples.map(async (s, idx) => {
       // In case an order has multiple samples / specimen types, join distinct values with a comma
       const orderSpecimenTypes =
         s.order?.samples && s.order.samples.length > 0
@@ -51,7 +52,16 @@ export class WorkstationService {
             ).join(', ')
           : s.specimenType;
 
+      const approved = await this.prisma.testResult.findFirst({ where: { sampleId: s.id, isApproved: true, isVoided: false }, include: { approvedBy: true }, orderBy: { approvedAt: 'desc' } });
+      const report = await this.prisma.auditLog.findFirst({ where: { action: 'REPORT_RESULTS', entityId: s.id }, include: { user: true }, orderBy: { createdAt: 'desc' } });
       return {
+        parentSite: s.order.parentSite?.siteName || '',
+        clientSiteCode: s.order.clientSite?.siteCode || '',
+        receivedAt: s.receivedAt,
+        reportedAt: report?.createdAt || null,
+        reportedBy: report?.user ? [report.user.firstName, report.user.lastName].join(' ').trim() : '',
+        approvedAt: approved?.approvedAt || null,
+        approvedBy: approved?.approvedBy ? [approved.approvedBy.firstName, approved.approvedBy.lastName].join(' ').trim() : '',
         no: idx + 1,
         hn: s.order.hn,
         labNo: s.labNumber,
@@ -59,12 +69,12 @@ export class WorkstationService {
         patientName: s.order.patientName,
         clientSite:
           s.order.clientSite?.siteName ||
-          'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
-        ward: s.order.ward?.wardName || 'OPD',
+          '',
+        ward: s.order.ward?.wardName || '',
         specimenType: orderSpecimenTypes || s.specimenType,
         status: s.status,
       };
-    });
+    }));
 
     await this.cacheManager.set(cacheKey, result, 15000);
     return result;
@@ -113,10 +123,12 @@ export class WorkstationService {
       const previousTests = await this.prisma.testResult.findMany({
         where: {
           testName: { in: testNames },
+          isApproved: true,
           isVoided: false,
           testResult: { not: null },
           sample: {
             id: { not: sampleId },
+            createdAt: {lt: currentSample!.createdAt},
             order: {
               hn,
               ...(clientSiteId ? { clientSiteId } : {}),
@@ -144,7 +156,7 @@ export class WorkstationService {
 
       return {
         id: r.id,
-        dept: r.department?.departmentName || 'DEPT: HEMATOLOGY',
+        dept: r.department?.departmentName || '',
         panel: r.testPanel,
         testName: r.testName,
         testResult: r.testResult || '',
@@ -154,6 +166,8 @@ export class WorkstationService {
         refRange: r.referenceRange || '',
         repeatResult: r.repeatResult || '',
         isApproved: r.isApproved,
+        status: r.isApproved ? 'Approved' : r.status === 'REPORTED' ? 'Reported' : 'Received',
+        isPendingRepeat: r.status === 'PENDING_REPEAT',
       };
     });
 
@@ -310,6 +324,7 @@ export class WorkstationService {
     if (sampleId) {
       await this.cacheManager.del(`workstation_results_${sampleId}`);
       await this.cacheManager.del('dashboard_stats');
+      await this.cacheManager.del('workstation_queue');
       await this.prisma.sample.update({
         where: { id: sampleId },
         data: { status: SpecimenStatus.APPROVED },
@@ -409,7 +424,7 @@ export class WorkstationService {
     if (data.sampleId) {
       await this.cacheManager.del(`workstation_results_${data.sampleId}`);
       const targetSpecimenStatus = data.targetStatus
-        ? (data.targetStatus as SpecimenStatus)
+        ? ((data.targetStatus === 'REPORTED' ? 'VERIFIED' : data.targetStatus) as SpecimenStatus)
         : SpecimenStatus.IN_PROCESS;
 
       await this.prisma.sample.update({
@@ -423,6 +438,7 @@ export class WorkstationService {
         where: { id: { in: data.resultIds } },
         data: {
           isApproved: false,
+          status: data.targetStatus === 'REPORTED' ? 'REPORTED' : 'PENDING',
           approvedAt: null,
           approvedById: null,
         },

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Req } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -7,13 +7,32 @@ import {
   ApiParam,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { WorkstationWorkflowService } from './workstation-workflow.service';
 import { WorkstationService } from './workstation.service';
 
 @ApiTags('Workstation')
 @ApiBearerAuth('JWT-auth')
 @Controller('workstation')
 export class WorkstationController {
-  constructor(private readonly workstationService: WorkstationService) {}
+  constructor(private readonly workstationService: WorkstationService, private readonly workflow: WorkstationWorkflowService) {}
+
+  @Get('history/:sampleId')
+  history(@Param('sampleId') sampleId: string) { return this.workflow.history(sampleId); }
+
+  @Post('transfer-repeat')
+  transferRepeat(@Body() body: {sampleId: string; resultIds: string[]}, @Req() req: any) {
+    return this.workflow.transferRepeat(body.sampleId, body.resultIds, req.user.sub);
+  }
+
+  @Post('report')
+  report(@Body() body: {sampleId: string; items: {id: string; testResult: string}[]}, @Req() req: any) {
+    return this.workflow.report(body.sampleId, body.items, req.user.sub);
+  }
+
+  @Post('repeat')
+  repeat(@Body() body: {sampleId: string; resultIds: string[]}, @Req() req: any) {
+    return this.workflow.repeat(body.sampleId, body.resultIds, req.user.sub);
+  }
 
   @Get('queue')
   @ApiOperation({
@@ -118,8 +137,9 @@ export class WorkstationController {
       resultIds?: string[];
       approvedById?: string;
     },
+    @Req() req: any,
   ) {
-    return this.workstationService.approve(body);
+    return this.workflow.approve(body.sampleId, body.resultIds, req.user.sub);
   }
 
   @Post('void')
@@ -174,8 +194,9 @@ export class WorkstationController {
       userAccount?: string;
       sampleId?: string;
     },
+    @Req() req: any,
   ) {
-    return this.workstationService.deleteResults(body);
+    return this.workflow.changeResults({...body, sampleId: body.sampleId!}, req.user.sub, true);
   }
 
   @Post('re-status')
@@ -209,7 +230,8 @@ export class WorkstationController {
       userAccount?: string;
       sampleId?: string;
     },
+    @Req() req: any,
   ) {
-    return this.workstationService.reStatus(body);
+    return this.workflow.changeResults({...body, sampleId: body.sampleId!}, req.user.sub);
   }
 }

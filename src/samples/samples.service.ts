@@ -69,6 +69,7 @@ export class SamplesService {
         order: {
           include: {
             clientSite: true,
+            parentSite: true,
             shipment: true,
             ward: true,
           },
@@ -77,6 +78,7 @@ export class SamplesService {
         testResults: {
           take: 1,
           select: {
+            department: {select: {departmentName: true}},
             testPanel: true,
             testName: true,
           },
@@ -88,6 +90,7 @@ export class SamplesService {
 
     const result = samples.map((s, idx) => ({
       id: s.id,
+      orderId: s.orderId,
       no: idx + 1,
       status: s.status,
       created: s.createdAt.toLocaleDateString('th-TH', {
@@ -98,22 +101,26 @@ export class SamplesService {
       shipment: s.order.shipment?.shipmentNumber || '-',
       clientSite:
         s.order.clientSite?.siteName ||
-        'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+        '',
       hn: s.order.hn,
       labNo: s.labNumber,
       patientName: s.order.patientName,
+      gender: s.order.gender || '',
+      parentSite: s.order.parentSite?.siteName || '',
+      testCode: (Array.isArray(s.order.orderItems) ? s.order.orderItems.find((item: any) => item.testName === s.profileTestName) as any : null)?.testCode || s.testResults[0]?.testPanel || '',
+      department: s.testResults[0]?.department?.departmentName || '',
       specimenType: s.specimenType,
       profileTestName:
         s.profileTestName ||
         s.testResults?.[0]?.testPanel ||
         s.testResults?.[0]?.testName ||
-        'Complete Blood Count (CBC)',
+        '',
       healthcareEntitlement:
-        s.order.entitlement || 'หลักประกันสุขภาพแห่งชาติ (UC)',
+        s.order.entitlement || '',
       urgentStatus: s.urgentStatus || s.order.urgentStatus || 'NORMAL',
       ward: s.order.ward?.wardName || s.order.patientType || 'ผู้ป่วยนอก (OPD)',
-      condition: s.sampleCondition?.conditionName || 'ปกติ (Normal)',
-      specimenCondition: s.sampleCondition?.conditionName || 'ปกติ (Normal)',
+      condition: s.sampleCondition?.conditionName || '',
+      specimenCondition: s.sampleCondition?.conditionName || '',
       conditionOther: s.conditionOther,
       receivedAt: s.receivedAt,
       rejectedAt: s.rejectedAt,

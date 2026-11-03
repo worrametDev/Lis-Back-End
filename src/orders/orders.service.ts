@@ -7,12 +7,14 @@ import {
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
+import { OrderCatalogService } from './order-catalog.service';
 import { OrderStatus, SpecimenStatus, ResultFlag } from '@prisma/client';
 
 @Injectable()
 export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly catalog: OrderCatalogService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
@@ -64,12 +66,14 @@ export class OrdersService {
         parentSite: true,
         ward: true,
         samples: {
+          where: { OR: [{rejectionReason: null}, {rejectionReason: {not: 'Order items updated'}}] },
           select: {
             id: true,
             labNumber: true,
             specimenType: true,
             profileTestName: true,
             receivedAt: true,
+            status: true,
           },
         },
       },
@@ -96,12 +100,16 @@ export class OrdersService {
             })
           : '-',
         clientSite:
-          o.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+          o.clientSite?.siteName || '',
         clientSiteId: o.clientSiteId,
-        parentSite: o.parentSite?.siteName || 'โรงพยาบาลเสนา',
+        siteCode: o.clientSite?.siteCode || '',
+        siteName: o.clientSite?.siteName || '',
+        parentSiteCode: o.parentSite?.siteCode || '',
+        parentSiteName: o.parentSite?.siteName || '',
+        parentSite: o.parentSite?.siteName || '',
         parentSiteId: o.parentSiteId,
         hn: o.hn,
-        labNo: firstSample?.labNumber || `69${Date.now().toString().slice(-7)}`,
+        labNo: firstSample?.labNumber || '',
         sampleId: firstSample?.id,
         patientName: o.patientName,
         title: o.title || '',
@@ -119,19 +127,21 @@ export class OrdersService {
         zipcode: o.zipcode || '',
         telephone: o.telephone || '',
         patientType: o.patientType || 'OPD',
-        entitlement: o.entitlement || 'หลักประกันสุขภาพแห่งชาติ (UC)',
+        entitlement: o.entitlement || '',
         collectedDate: o.collectedDate || '',
         urgentStatus: o.urgentStatus || 'NORMAL',
         ward: o.ward?.wardName || o.patientType || 'OPD',
         idCard: o.idCard || '',
         passportNo: o.passportNo || '',
-        specimenType: firstSample?.specimenType || 'EDTA Blood',
+        passport: o.passportNo || '',
+        specimenType: firstSample?.specimenType || '',
         testName:
           firstSample?.profileTestName ||
           o.testProfile ||
           o.testPanel ||
-          'Complete Blood Count (CBC)',
+          '',
         orderItems: o.orderItems || [],
+        samples: o.samples,
         samplesCount: o.samples.length,
       };
     });
@@ -245,9 +255,6 @@ export class OrdersService {
         },
       });
     }
-    if (!clientSite) {
-      clientSite = await this.prisma.clientSite.findFirst();
-    }
     if (!clientSite) throw new BadRequestException('ไม่พบ Client Site ในระบบ');
 
     const parentSiteId = clientSite.parentSiteId;
@@ -266,33 +273,12 @@ export class OrdersService {
       if (matchedWard) wardId = matchedWard.id;
     }
 
-    const profileTestName =
-      data.testProfile ||
-      data.testPanel ||
-      data.selectedTests?.[0] ||
-      (Array.isArray(data.orderItems) && data.orderItems[0]?.testName) ||
-      'Complete Blood Count (CBC)';
-
-    const rawOrderItems =
-      Array.isArray(data.orderItems) && data.orderItems.length > 0
-        ? data.orderItems
-        : [
-            {
-              no: 1,
-              testCode:
-                data.testProfile ||
-                data.testPanel ||
-                data.selectedTests?.[0] ||
-                'CBC',
-              testName: profileTestName,
-              specimenType: data.specimenType || 'EDTA Blood',
-              department: 'Hematology',
-              status: 'Registered',
-            },
-          ];
-
+    const rawOrderItems = Array.isArray(data.orderItems) ? data.orderItems : [];
+    const resolved = await this.catalog.resolve(rawOrderItems);
+    const profileTestName = rawOrderItems[0]?.testName || '';
+    return this.prisma.$transaction(async (tx) => {
     // Create Order in transaction
-    const order = await this.prisma.order.create({
+    const order = await tx.order.create({
       data: {
         hn: data.hn,
         patientName: data.patientName,
@@ -304,8 +290,8 @@ export class OrdersService {
         gender: data.gender,
         dob: data.dob,
         age: data.age,
-        nationality: data.nationality || 'THAI',
-        ethnicity: data.ethnicity || 'ไทย',
+        nationality: data.nationality || '',
+        ethnicity: data.ethnicity || '',
         address: data.address,
         subdistrict: data.subdistrict,
         district: data.district,
@@ -313,7 +299,7 @@ export class OrdersService {
         zipcode: data.zipcode,
         telephone: data.telephone,
         patientType: data.patientType || 'OPD',
-        entitlement: data.entitlement || 'หลักประกันสุขภาพแห่งชาติ (UC)',
+        entitlement: data.entitlement || '',
         collectedDate: data.collectedDate,
         urgentStatus: data.urgentStatus || 'NORMAL',
         testPanel: data.testPanel,
@@ -332,128 +318,7 @@ export class OrdersService {
       },
     });
 
-    const datePrefix = '69' + new Date().toISOString().slice(2, 4); // e.g. 6926
-    const randomBase = Math.floor(10000 + Math.random() * 80000);
-
-    const defaultDept =
-      (await this.prisma.department.findFirst({
-        where: { departmentCode: 'HEM' },
-      })) || (await this.prisma.department.findFirst());
-
-    const createdSamples: any[] = [];
-    for (let i = 0; i < rawOrderItems.length; i++) {
-      const item = rawOrderItems[i];
-      const itemLabNumber = `${datePrefix}${randomBase + i}`;
-      const itemSpecimen =
-        item.specimenType || data.specimenType || 'EDTA Blood';
-      const itemTestName = item.testName || item.testCode || profileTestName;
-
-      const sample = await this.prisma.sample.create({
-        data: {
-          orderId: order.id,
-          labNumber: itemLabNumber,
-          specimenType: itemSpecimen,
-          profileTestName: itemTestName,
-          urgentStatus: data.urgentStatus || 'NORMAL',
-          barcode: itemLabNumber,
-          status: SpecimenStatus.REGISTERED,
-        },
-      });
-      createdSamples.push(sample);
-
-      // Create test result(s) for this sample
-      if (defaultDept) {
-        if (
-          item.testCode === 'CBC' ||
-          itemTestName.includes('CBC') ||
-          itemTestName.includes('Complete Blood Count')
-        ) {
-          const cbcSubTests = [
-            {
-              testPanel: 'CBC',
-              testName: 'WBC Count',
-              unit: '10^3 cell/ul',
-              referenceRange: '4.00 - 10.00',
-              testResult: '4.52',
-              flag: ResultFlag.NORMAL,
-              lastResult: '4.16',
-              repeatResult: '4.48',
-            },
-            {
-              testPanel: 'CBC',
-              testName: 'RBC Count',
-              unit: '10^6 cell/ul',
-              referenceRange: '4.00 - 10.00',
-              testResult: '4.52',
-              flag: ResultFlag.NORMAL,
-              lastResult: '4.16',
-              repeatResult: '4.48',
-            },
-            {
-              testPanel: 'CBC',
-              testName: 'Hemoglobin',
-              unit: 'g/dL',
-              referenceRange: '12.00 - 16.00',
-              testResult: '14.2',
-              flag: ResultFlag.NORMAL,
-              lastResult: '13.8',
-              repeatResult: '14.1',
-            },
-            {
-              testPanel: 'CBC',
-              testName: 'Hematocrit',
-              unit: '%',
-              referenceRange: '36.0 - 48.0',
-              testResult: '42.5',
-              flag: ResultFlag.NORMAL,
-              lastResult: '41.0',
-              repeatResult: '42.3',
-            },
-            {
-              testPanel: 'CBC',
-              testName: 'Platelet Count',
-              unit: '10^3 cell/ul',
-              referenceRange: '140 - 400',
-              testResult: '285',
-              flag: ResultFlag.NORMAL,
-              lastResult: '270',
-              repeatResult: '280',
-            },
-          ];
-          for (const sub of cbcSubTests) {
-            await this.prisma.testResult.create({
-              data: {
-                sampleId: sample.id,
-                departmentId: defaultDept.id,
-                testPanel: sub.testPanel,
-                testName: sub.testName,
-                unit: sub.unit,
-                referenceRange: sub.referenceRange,
-                testResult: sub.testResult,
-                flag: sub.flag,
-                lastResult: sub.lastResult,
-                repeatResult: sub.repeatResult,
-              },
-            });
-          }
-        } else {
-          await this.prisma.testResult.create({
-            data: {
-              sampleId: sample.id,
-              departmentId: defaultDept.id,
-              testPanel: item.testCode || 'GEN',
-              testName: itemTestName,
-              unit: item.unit || '-',
-              referenceRange: item.referenceRange || '-',
-              testResult: item.testResult || null,
-              flag: ResultFlag.NORMAL,
-              lastResult: item.lastResult || null,
-              repeatResult: item.repeatResult || null,
-            },
-          });
-        }
-      }
-    }
+    const createdSamples = await this.catalog.createSamples(tx, order.id, resolved, data.urgentStatus);
 
     try {
       await this.cacheManager.del('dashboard_stats');
@@ -464,36 +329,68 @@ export class OrdersService {
 
     const firstSample = createdSamples[0];
     return {
+      ...order,
       id: order.id,
       no: 1,
       status: 'Registered',
       created: order.createdAt.toLocaleDateString('th-TH'),
       received: '-',
       clientSite:
-        order.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+        order.clientSite?.siteName || '',
       clientSiteId: order.clientSiteId,
+      siteCode: order.clientSite?.siteCode || '',
+      siteName: order.clientSite?.siteName || '',
+      parentSite: order.parentSite?.siteName || '',
+      parentSiteCode: order.parentSite?.siteCode || '',
+      parentSiteName: order.parentSite?.siteName || '',
       hn: order.hn,
-      labNo: firstSample?.labNumber || `${datePrefix}${randomBase}`,
+      labNo: firstSample?.labNumber || '',
       sampleId: firstSample?.id,
       patientName: order.patientName,
       specimenType:
-        firstSample?.specimenType || data.specimenType || 'EDTA Blood',
+        firstSample?.specimenType || data.specimenType || '',
       testName: firstSample?.profileTestName || profileTestName,
       ward: order.ward?.wardName || order.patientType || 'OPD',
       urgentStatus: order.urgentStatus || 'NORMAL',
       orderItems: rawOrderItems,
       samples: createdSamples,
     };
+    }, {timeout: 30000});
   }
 
   async update(id: string, data: any) {
-    try {
-      await this.cacheManager.del('dashboard_stats');
-    } catch {}
-    return this.prisma.order.update({
-      where: { id },
-      data,
+    const existing = await this.prisma.order.findUnique({where: {id}, include: {samples: {where: {OR: [{rejectionReason: null}, {rejectionReason: {not: 'Order items updated'}}]}}}});
+    if (!existing) throw new NotFoundException('ไม่พบ Order');
+    if (existing.samples.some((sample) => sample.status !== 'REGISTERED')) throw new BadRequestException('แก้ไขได้เฉพาะ Order ที่ยังไม่ตรวจรับ');
+    const resolved = await this.catalog.resolve(data.orderItems);
+    const fields = ['hn','patientName','title','firstName','lastName','gender','dob','age','nationality','ethnicity','address','subdistrict','district','province','zipcode','telephone','patientType','entitlement','collectedDate','urgentStatus','testPanel','testProfile','testItem','idCard','orderItems'];
+    const payload: any = {};
+    for (const field of fields) if (data[field] !== undefined) payload[field] = data[field];
+    if (data.passportNo !== undefined || data.passport !== undefined) payload.passportNo = data.passportNo ?? data.passport;
+    if (data.siteCode) {
+      const client = await this.prisma.clientSite.findUnique({where: {siteCode: data.siteCode}});
+      if (!client) throw new BadRequestException('ไม่พบหน่วยงานส่งตรวจ');
+      payload.clientSiteId = client.id; payload.parentSiteId = client.parentSiteId;
+    }
+    if (data.ward !== undefined) {
+      const ward = data.ward ? await this.prisma.ward.findFirst({where: {OR: [{wardCode: data.ward}, {wardName: data.ward}]}}) : null;
+      payload.wardId = ward?.id || null;
+    }
+    const changed = JSON.stringify(existing.orderItems) !== JSON.stringify(data.orderItems);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.order.update({where: {id}, data: payload});
+      if (changed) {
+        const ids = existing.samples.map((sample) => sample.id);
+        await tx.testResult.updateMany({where: {sampleId: {in: ids}}, data: {isVoided: true, voidReason: 'Order items updated', voidedAt: new Date()}});
+        await tx.sample.updateMany({where: {id: {in: ids}}, data: {status: 'REJECTED', rejectionReason: 'Order items updated'}});
+        await this.catalog.createSamples(tx, id, resolved, data.urgentStatus);
+        await tx.auditLog.create({data: {action: 'UPDATE_ORDER_ITEMS', entityType: 'Order', entityId: id, oldValues: existing.orderItems ?? [], newValues: data.orderItems}});
+      }
     });
+    await this.invalidateCache();
+    for (const key of ['dashboard_stats','samples_list_{}','workstation_queue']) await this.cacheManager.del(key);
+    const list = await this.findAll();
+    return list.find((order) => order.id === id);
   }
 
   async cancel(id: string) {

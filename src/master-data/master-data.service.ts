@@ -76,23 +76,18 @@ export class MasterDataService {
 
     const siteName = cleanStr(
       primarySite?.siteName,
-      envHospitalName || 'โรงพยาบาลเสนา',
+      envHospitalName || '',
     );
-    const siteCode = primarySite?.siteCode || '00940';
-    const province = cleanStr(primarySite?.province, 'พระนครศรีอยุธยา');
-    const district = cleanStr(primarySite?.district, 'อำเภอเสนา');
-    const subdistrict = cleanStr(primarySite?.subdistrict, 'ตำบลสามกอ');
-    const address = cleanStr(primarySite?.address, '111 หมู่ 2');
+    const siteCode = primarySite?.siteCode || '';
+    const province = cleanStr(primarySite?.province, '');
+    const district = cleanStr(primarySite?.district, '');
+    const subdistrict = cleanStr(primarySite?.subdistrict, '');
+    const address = cleanStr(primarySite?.address, '');
 
     let hospitalNameEn = envHospitalNameEn || '';
     if (!hospitalNameEn && siteName.includes('(') && siteName.includes(')')) {
       const match = siteName.match(/\(([^)]+)\)/);
       if (match) hospitalNameEn = match[1];
-    } else if (
-      !hospitalNameEn &&
-      (siteName.includes('เสนา') || siteName.includes('Sena'))
-    ) {
-      hospitalNameEn = 'Sena Hospital';
     }
 
     let displayName = siteName;
@@ -110,8 +105,8 @@ export class MasterDataService {
       district,
       subdistrict,
       address,
-      zipcode: primarySite?.zipcode || '13110',
-      lnPattern: primarySite?.lnPattern || 'LN-69{YY}{MM}{DD}{SEQ}',
+      zipcode: primarySite?.zipcode || '',
+      lnPattern: primarySite?.lnPattern || 'yymmdd0000',
       siteType: primarySite?.siteType || 'Parent Site',
     };
 
@@ -150,9 +145,10 @@ export class MasterDataService {
     const siteName = cleanInput(
       data.siteName,
       primarySite?.siteName,
-      'โรงพยาบาลเสนา',
+      process.env.HOSPITAL_NAME || '',
     );
-    const hospitalNameEn = data.hospitalNameEn || 'Sena Hospital';
+    const hospitalNameEn = data.hospitalNameEn || process.env.HOSPITAL_NAME_EN || '';
+    if (!siteName || (!primarySite && !data.siteCode)) throw new BadRequestException('กรุณาระบุรหัสและชื่อหน่วยงาน');
 
     let displayName = data.displayName;
     if (!displayName || displayName.includes('?')) {
@@ -169,21 +165,21 @@ export class MasterDataService {
         data: {
           siteCode: data.siteCode || primarySite.siteCode,
           siteName: siteName,
-          address: cleanInput(data.address, primarySite.address, '111 หมู่ 2'),
+          address: cleanInput(data.address, primarySite.address, ''),
           subdistrict: cleanInput(
             data.subdistrict,
             primarySite.subdistrict,
-            'ตำบลสามกอ',
+            '',
           ),
           district: cleanInput(
             data.district,
             primarySite.district,
-            'อำเภอเสนา',
+            '',
           ),
           province: cleanInput(
             data.province,
             primarySite.province,
-            'พระนครศรีอยุธยา',
+            '',
           ),
           zipcode:
             data.zipcode !== undefined ? data.zipcode : primarySite.zipcode,
@@ -196,7 +192,7 @@ export class MasterDataService {
     } else {
       primarySite = await this.prisma.parentSite.create({
         data: {
-          siteCode: data.siteCode || '00940',
+          siteCode: data.siteCode!,
           siteName: siteName,
           siteType: 'Parent Site',
           siteStatus: 'Active',
@@ -205,7 +201,7 @@ export class MasterDataService {
           district: data.district || '',
           province: data.province || '',
           zipcode: data.zipcode || '',
-          lnPattern: data.lnPattern || 'LN-69{YY}{MM}{DD}{SEQ}',
+          lnPattern: data.lnPattern || 'yymmdd0000',
         },
       });
     }
@@ -911,49 +907,7 @@ export class MasterDataService {
   // 6. TITLES (คำนำหน้าชื่อ - Database Persisted)
   // ==========================================
   async findAllTitles() {
-    let list = await this.prisma.title.findMany({
-      orderBy: { titleCode: 'asc' },
-    });
-    if (list.length === 0) {
-      const defaults = [
-        {
-          titleCode: '01',
-          titleNameTh: 'นาย',
-          titleNameEn: 'Mr.',
-          status: 'Active',
-        },
-        {
-          titleCode: '02',
-          titleNameTh: 'นาง',
-          titleNameEn: 'Mrs.',
-          status: 'Active',
-        },
-        {
-          titleCode: '03',
-          titleNameTh: 'นางสาว',
-          titleNameEn: 'Miss',
-          status: 'Active',
-        },
-        {
-          titleCode: '04',
-          titleNameTh: 'เด็กชาย',
-          titleNameEn: 'Master',
-          status: 'Active',
-        },
-        {
-          titleCode: '05',
-          titleNameTh: 'เด็กหญิง',
-          titleNameEn: 'Girl',
-          status: 'Active',
-        },
-      ];
-      for (const d of defaults) {
-        await this.prisma.title.create({ data: d }).catch(() => {});
-      }
-      list = await this.prisma.title.findMany({
-        orderBy: { titleCode: 'asc' },
-      });
-    }
+    const list = await this.prisma.title.findMany({ orderBy: { titleCode: 'asc' } });
     return list.map((t) => ({
       id: t.id,
       titleCode: t.titleCode,
@@ -1021,55 +975,7 @@ export class MasterDataService {
   // 7. ETHNICITIES (เชื้อชาติ - Database Persisted)
   // ==========================================
   async findAllEthnicities() {
-    let list = await this.prisma.ethnicity.findMany({
-      orderBy: { ethnicityCode: 'asc' },
-    });
-    if (list.length === 0) {
-      const defaults = [
-        {
-          ethnicityCode: 'TH',
-          ethnicityNameTh: 'ไทย',
-          ethnicityNameEn: 'Thai',
-          status: 'Active',
-        },
-        {
-          ethnicityCode: 'MM',
-          ethnicityNameTh: 'เมียนมา',
-          ethnicityNameEn: 'Myanmar',
-          status: 'Active',
-        },
-        {
-          ethnicityCode: 'LA',
-          ethnicityNameTh: 'ลาว',
-          ethnicityNameEn: 'Lao',
-          status: 'Active',
-        },
-        {
-          ethnicityCode: 'KH',
-          ethnicityNameTh: 'กัมพูชา',
-          ethnicityNameEn: 'Cambodian',
-          status: 'Active',
-        },
-        {
-          ethnicityCode: 'CN',
-          ethnicityNameTh: 'จีน',
-          ethnicityNameEn: 'Chinese',
-          status: 'Active',
-        },
-        {
-          ethnicityCode: 'OTHER',
-          ethnicityNameTh: 'อื่นๆ',
-          ethnicityNameEn: 'Other',
-          status: 'Active',
-        },
-      ];
-      for (const d of defaults) {
-        await this.prisma.ethnicity.create({ data: d }).catch(() => {});
-      }
-      list = await this.prisma.ethnicity.findMany({
-        orderBy: { ethnicityCode: 'asc' },
-      });
-    }
+    const list = await this.prisma.ethnicity.findMany({ orderBy: { ethnicityCode: 'asc' } });
     return list.map((e) => ({
       id: e.id,
       ethnicityCode: e.ethnicityCode,
@@ -1140,69 +1046,10 @@ export class MasterDataService {
   // 8. TEST PANELS (ชุดการตรวจ - Database Persisted)
   // ==========================================
   async findAllTestPanels() {
-    let list = await this.prisma.testPanel.findMany({
+    const list = await (this.prisma.testPanel as any).findMany({
       orderBy: { panelCode: 'asc' },
     });
-    if (list.length === 0) {
-      const defaults = [
-        {
-          panelCode: 'CBC',
-          panelName: 'Complete Blood Count Panel',
-          specimenType: 'EDTA Blood',
-          department: 'Hematology',
-          status: 'Active',
-        },
-        {
-          panelCode: 'DM-SCREEN',
-          panelName: 'Diabetic Screen Panel (FBS, HbA1c)',
-          specimenType: 'Fluoride / EDTA Blood',
-          department: 'Chemistry',
-          status: 'Active',
-        },
-        {
-          panelCode: 'RFT',
-          panelName: 'Renal Function Test Panel (BUN, Cr)',
-          specimenType: 'Clotted Blood',
-          department: 'Chemistry',
-          status: 'Active',
-        },
-        {
-          panelCode: 'LIPID',
-          panelName: 'Lipid Profile Panel (CHOL, TRIG, HDL, LDL)',
-          specimenType: 'Clotted Blood',
-          department: 'Chemistry',
-          status: 'Active',
-        },
-        {
-          panelCode: 'LFT',
-          panelName: 'Liver Function Test Panel (AST, ALT, ALP, TBIL)',
-          specimenType: 'Clotted Blood',
-          department: 'Chemistry',
-          status: 'Active',
-        },
-        {
-          panelCode: 'UA',
-          panelName: 'Urinalysis Routine',
-          specimenType: 'Urine',
-          department: 'Microscopy',
-          status: 'Active',
-        },
-        {
-          panelCode: 'ELECTROLYTES',
-          panelName: 'Electrolytes Panel (Na, K, Cl, CO2)',
-          specimenType: 'Clotted Blood',
-          department: 'Chemistry',
-          status: 'Active',
-        },
-      ];
-      for (const d of defaults) {
-        await this.prisma.testPanel.create({ data: d }).catch(() => {});
-      }
-      list = await this.prisma.testPanel.findMany({
-        orderBy: { panelCode: 'asc' },
-      });
-    }
-    return list.map((p) => ({
+    return list.map((p: any) => ({
       id: p.id,
       panelCode: p.panelCode,
       panelName: p.panelName,
@@ -1210,6 +1057,8 @@ export class MasterDataService {
       name: p.panelName,
       specimenType: p.specimenType,
       department: p.department,
+      testItems: Array.isArray(p.testItems) ? p.testItems : [],
+      selectedSites: Array.isArray(p.selectedSites) ? p.selectedSites : ['ALL'],
       status: p.status,
     }));
   }
@@ -1218,12 +1067,14 @@ export class MasterDataService {
     const panelCode =
       data.panelCode || data.code || `P-${Date.now().toString().slice(-4)}`;
     const panelName = data.panelName || data.name || '';
-    const created = await this.prisma.testPanel.create({
+    const created = await (this.prisma.testPanel as any).create({
       data: {
         panelCode,
         panelName,
         specimenType: data.specimenType,
         department: data.department,
+        testItems: Array.isArray(data.testItems) ? data.testItems : [],
+        selectedSites: Array.isArray(data.selectedSites) ? data.selectedSites : ['ALL'],
         status: data.status || 'Active',
       },
     });
@@ -1235,6 +1086,8 @@ export class MasterDataService {
       name: created.panelName,
       specimenType: created.specimenType,
       department: created.department,
+      testItems: created.testItems || [],
+      selectedSites: created.selectedSites || ['ALL'],
       status: created.status,
     };
   }
@@ -1248,9 +1101,13 @@ export class MasterDataService {
     if (data.specimenType !== undefined)
       updateData.specimenType = data.specimenType;
     if (data.department !== undefined) updateData.department = data.department;
+    if (data.testItems !== undefined)
+      updateData.testItems = Array.isArray(data.testItems) ? data.testItems : [];
+    if (data.selectedSites !== undefined)
+      updateData.selectedSites = Array.isArray(data.selectedSites) ? data.selectedSites : ['ALL'];
     if (data.status) updateData.status = data.status;
 
-    const updated = await this.prisma.testPanel.update({
+    const updated = await (this.prisma.testPanel as any).update({
       where: { id },
       data: updateData,
     });
@@ -1262,6 +1119,8 @@ export class MasterDataService {
       name: updated.panelName,
       specimenType: updated.specimenType,
       department: updated.department,
+      testItems: updated.testItems || [],
+      selectedSites: updated.selectedSites || ['ALL'],
       status: updated.status,
     };
   }
@@ -1375,251 +1234,14 @@ export class MasterDataService {
   // ==========================================
   // 10. LAB TESTS & SUB-ITEMS (Database Persisted with Fallback)
   // ==========================================
-  private inMemoryTests: any[] = [
-    {
-      id: 'test-1',
-      code: 'FLU-A',
-      name: 'Influenza A Ag',
-      selectedSites: ['ALL'],
-      status: 'Active',
-      testItems: [
-        {
-          id: 'item-1-1',
-          code: 'FluA-COI',
-          name: 'Influenza A COI',
-          valueType: 'decimal',
-          unit: 'COI',
-          low: '0.00',
-          high: '0.99',
-          criticalLow: null,
-          criticalHigh: '1.00',
-          criticalValue: '',
-        },
-        {
-          id: 'item-1-2',
-          code: 'FluA-Ag',
-          name: 'Influenza A Ag',
-          valueType: 'list',
-          valueList: ['Negative', 'Positive'],
-          unit: '',
-          low: null,
-          high: null,
-          criticalLow: null,
-          criticalHigh: null,
-          criticalValue: 'Positive',
-        },
-      ],
-    },
-    {
-      id: 'test-2',
-      code: 'STOOL-EXAM',
-      name: 'Stool Examination',
-      selectedSites: ['ALL'],
-      status: 'Active',
-      testItems: [
-        {
-          id: 'item-2-1',
-          code: 'Color',
-          name: 'Color',
-          valueType: 'list',
-          valueList: ['Yellow', 'Amber', 'Bloody'],
-          unit: '',
-          criticalValue: 'Bloody',
-        },
-        {
-          id: 'item-2-2',
-          code: 'Appearance',
-          name: 'Appearance',
-          valueType: 'list',
-          valueList: ['Soft', 'Formed', 'Watery', 'Mucous'],
-          unit: '',
-          criticalValue: '',
-        },
-        {
-          id: 'item-2-3',
-          code: 'Parasite',
-          name: 'Parasite',
-          valueType: 'list',
-          valueList: ['Not Found', 'Found'],
-          unit: '',
-          criticalValue: 'Found',
-        },
-        {
-          id: 'item-2-4',
-          code: 'Protozoa',
-          name: 'Protozoa',
-          valueType: 'list',
-          valueList: ['Not Found', 'Found'],
-          unit: '',
-          criticalValue: 'Found',
-        },
-        {
-          id: 'item-2-5',
-          code: 'FOB',
-          name: 'Occult Blood (FOB)',
-          valueType: 'list',
-          valueList: ['Negative', 'Positive'],
-          unit: '',
-          criticalValue: 'Positive',
-        },
-      ],
-    },
-    {
-      id: 'test-3',
-      code: 'FBS',
-      name: 'Fasting Blood Sugar',
-      selectedSites: ['ALL'],
-      status: 'Active',
-      testItems: [
-        {
-          id: 'item-3-1',
-          code: 'FBS',
-          name: 'Fasting Blood Sugar',
-          valueType: 'integer',
-          unit: 'mg/dL',
-          low: '70',
-          high: '99',
-          criticalLow: '50',
-          criticalHigh: '400',
-          criticalValue: '',
-        },
-      ],
-    },
-    {
-      id: 'test-4',
-      code: 'CHOL',
-      name: 'Cholesterol Total',
-      selectedSites: ['ALL'],
-      status: 'Active',
-      testItems: [
-        {
-          id: 'item-4-1',
-          code: 'CHOL',
-          name: 'Cholesterol Total',
-          valueType: 'integer',
-          unit: 'mg/dL',
-          low: '0',
-          high: '200',
-          criticalLow: null,
-          criticalHigh: '300',
-          criticalValue: '',
-        },
-      ],
-    },
-    {
-      id: 'test-5',
-      code: 'TRIG',
-      name: 'Triglyceride',
-      selectedSites: ['ALL'],
-      status: 'Active',
-      testItems: [
-        {
-          id: 'item-5-1',
-          code: 'TRIG',
-          name: 'Triglyceride',
-          valueType: 'integer',
-          unit: 'mg/dL',
-          low: '0',
-          high: '150',
-          criticalLow: null,
-          criticalHigh: '500',
-          criticalValue: '',
-        },
-      ],
-    },
-    {
-      id: 'test-6',
-      code: 'HDL',
-      name: 'High-Density Lipoprotein (HDL)',
-      selectedSites: ['ALL'],
-      status: 'Active',
-      testItems: [
-        {
-          id: 'item-6-1',
-          code: 'HDL',
-          name: 'HDL-Cholesterol',
-          valueType: 'integer',
-          unit: 'mg/dL',
-          low: '40',
-          high: '60',
-          criticalLow: '20',
-          criticalHigh: null,
-          criticalValue: '',
-        },
-      ],
-    },
-    {
-      id: 'test-7',
-      code: 'LDL',
-      name: 'Low-Density Lipoprotein (LDL)',
-      selectedSites: ['ALL'],
-      status: 'Active',
-      testItems: [
-        {
-          id: 'item-7-1',
-          code: 'LDL',
-          name: 'LDL-Cholesterol',
-          valueType: 'integer',
-          unit: 'mg/dL',
-          low: '0',
-          high: '100',
-          criticalLow: null,
-          criticalHigh: '190',
-          criticalValue: '',
-        },
-      ],
-    },
-    {
-      id: 'test-8',
-      code: 'BUN',
-      name: 'Blood Urea Nitrogen',
-      selectedSites: ['ALL'],
-      status: 'Active',
-      testItems: [
-        {
-          id: 'item-8-1',
-          code: 'BUN',
-          name: 'Blood Urea Nitrogen',
-          valueType: 'decimal',
-          unit: 'mg/dL',
-          low: '6.0',
-          high: '20.0',
-          criticalLow: null,
-          criticalHigh: '80.0',
-          criticalValue: '',
-        },
-      ],
-    },
-    {
-      id: 'test-9',
-      code: 'CR',
-      name: 'Creatinine',
-      selectedSites: ['ALL'],
-      status: 'Active',
-      testItems: [
-        {
-          id: 'item-9-1',
-          code: 'CR',
-          name: 'Creatinine',
-          valueType: 'decimal',
-          unit: 'mg/dL',
-          low: '0.50',
-          high: '1.20',
-          criticalLow: null,
-          criticalHigh: '5.00',
-          criticalValue: '',
-        },
-      ],
-    },
-  ];
+  private inMemoryTests: any[] = [];
 
   async findAllTests() {
     try {
       if ((this.prisma as any).labTest) {
-        const list = await (this.prisma as any).labTest.findMany({
+        return await (this.prisma as any).labTest.findMany({
           orderBy: { code: 'asc' },
         });
-        if (list && list.length > 0) return list;
       }
     } catch {}
     return this.inMemoryTests;
@@ -1708,56 +1330,14 @@ export class MasterDataService {
   // ==========================================
   // 11. TEST PROFILES (Database Persisted with Fallback)
   // ==========================================
-  private inMemoryProfiles: any[] = [
-    {
-      id: 'profile-1',
-      code: 'LIPID',
-      name: 'Lipid Profile',
-      tests: ['CHOL', 'HDL', 'LDL', 'TRIG'],
-      selectedSites: ['ALL'],
-      status: 'Active',
-    },
-    {
-      id: 'profile-2',
-      code: 'RFT-PROFILE',
-      name: 'Renal Function Profile',
-      tests: ['BUN', 'CR'],
-      selectedSites: ['ALL'],
-      status: 'Active',
-    },
-    {
-      id: 'profile-3',
-      code: 'DM-PROFILE',
-      name: 'Diabetic Profile',
-      tests: ['FBS'],
-      selectedSites: ['ALL'],
-      status: 'Active',
-    },
-    {
-      id: 'profile-4',
-      code: 'FLU-PROFILE',
-      name: 'Influenza Rapid Ag Profile',
-      tests: ['FLU-A'],
-      selectedSites: ['ALL'],
-      status: 'Active',
-    },
-    {
-      id: 'profile-5',
-      code: 'STOOL-PROFILE',
-      name: 'Stool Examination Profile',
-      tests: ['STOOL-EXAM'],
-      selectedSites: ['ALL'],
-      status: 'Active',
-    },
-  ];
+  private inMemoryProfiles: any[] = [];
 
   async findAllTestProfiles() {
     try {
       if ((this.prisma as any).testProfile) {
-        const list = await (this.prisma as any).testProfile.findMany({
+        return await (this.prisma as any).testProfile.findMany({
           orderBy: { code: 'asc' },
         });
-        if (list && list.length > 0) return list;
       }
     } catch {}
     return this.inMemoryProfiles;
@@ -1824,219 +1404,14 @@ export class MasterDataService {
   // ==========================================
   // 12. ANALYZERS (Database Persisted with Fallback)
   // ==========================================
-  private inMemoryAnalyzers: any[] = [
-    {
-      id: 'analyzer-1',
-      code: 'COBAS-6000',
-      name: 'Roche Cobas 6000',
-      department: 'Clinical Chemistry',
-      protocol: 'ASTM 1394',
-      ipAddress: '192.168.10.51',
-      port: '5000',
-      status: 'Active',
-      orderCodes: [
-        {
-          id: 'ord-1-1',
-          orderCode: 'GLU_ORD',
-          orderName: 'Glucose Order',
-          resultCodes: [
-            {
-              id: 'res-1-1-1',
-              resultCode: 'GLU',
-              resultName: 'Glucose',
-              unit: 'mg/dL',
-            },
-          ],
-        },
-        {
-          id: 'ord-1-2',
-          orderCode: 'LIPID_ORD',
-          orderName: 'Lipid Panel Order',
-          resultCodes: [
-            {
-              id: 'res-1-2-1',
-              resultCode: 'CHOL',
-              resultName: 'Cholesterol Total',
-              unit: 'mg/dL',
-            },
-            {
-              id: 'res-1-2-2',
-              resultCode: 'TRIG',
-              resultName: 'Triglycerides',
-              unit: 'mg/dL',
-            },
-            {
-              id: 'res-1-2-3',
-              resultCode: 'HDL',
-              resultName: 'HDL Cholesterol',
-              unit: 'mg/dL',
-            },
-            {
-              id: 'res-1-2-4',
-              resultCode: 'LDL',
-              resultName: 'LDL Cholesterol',
-              unit: 'mg/dL',
-            },
-          ],
-        },
-        {
-          id: 'ord-1-3',
-          orderCode: 'RFT_ORD',
-          orderName: 'Renal Function Panel',
-          resultCodes: [
-            {
-              id: 'res-1-3-1',
-              resultCode: 'BUN',
-              resultName: 'Blood Urea Nitrogen',
-              unit: 'mg/dL',
-            },
-            {
-              id: 'res-1-3-2',
-              resultCode: 'CR',
-              resultName: 'Creatinine',
-              unit: 'mg/dL',
-            },
-            {
-              id: 'res-1-3-3',
-              resultCode: 'UA',
-              resultName: 'Uric Acid',
-              unit: 'mg/dL',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      id: 'analyzer-2',
-      code: 'SYSMEX-XN',
-      name: 'Sysmex XN-1000',
-      department: 'Hematology',
-      protocol: 'HL7 v2.5',
-      ipAddress: '192.168.10.52',
-      port: '5100',
-      status: 'Active',
-      orderCodes: [
-        {
-          id: 'ord-2-1',
-          orderCode: 'CBC_ORD',
-          orderName: 'Complete Blood Count Order',
-          resultCodes: [
-            {
-              id: 'res-2-1-1',
-              resultCode: 'WBC',
-              resultName: 'White Blood Cell',
-              unit: '10^3/uL',
-            },
-            {
-              id: 'res-2-1-2',
-              resultCode: 'RBC',
-              resultName: 'Red Blood Cell',
-              unit: '10^6/uL',
-            },
-            {
-              id: 'res-2-1-3',
-              resultCode: 'HGB',
-              resultName: 'Hemoglobin',
-              unit: 'g/dL',
-            },
-            {
-              id: 'res-2-1-4',
-              resultCode: 'HCT',
-              resultName: 'Hematocrit',
-              unit: '%',
-            },
-            {
-              id: 'res-2-1-5',
-              resultCode: 'MCV',
-              resultName: 'Mean Corpuscular Volume',
-              unit: 'fL',
-            },
-            {
-              id: 'res-2-1-6',
-              resultCode: 'MCH',
-              resultName: 'Mean Corpuscular Hemoglobin',
-              unit: 'pg',
-            },
-            {
-              id: 'res-2-1-7',
-              resultCode: 'MCHC',
-              resultName: 'Mean Corpuscular Hgb Conc.',
-              unit: 'g/dL',
-            },
-            {
-              id: 'res-2-1-8',
-              resultCode: 'PLT',
-              resultName: 'Platelet Count',
-              unit: '10^3/uL',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      id: 'analyzer-3',
-      code: 'ARCHITECT-C4000',
-      name: 'Abbott Architect c4000',
-      department: 'Clinical Chemistry',
-      protocol: 'ASTM 1394',
-      ipAddress: '192.168.10.53',
-      port: '5050',
-      status: 'Active',
-      orderCodes: [
-        {
-          id: 'ord-3-1',
-          orderCode: 'LFT_ORD',
-          orderName: 'Liver Function Panel',
-          resultCodes: [
-            {
-              id: 'res-3-1-1',
-              resultCode: 'AST',
-              resultName: 'Aspartate Aminotransferase',
-              unit: 'U/L',
-            },
-            {
-              id: 'res-3-1-2',
-              resultCode: 'ALT',
-              resultName: 'Alanine Aminotransferase',
-              unit: 'U/L',
-            },
-            {
-              id: 'res-3-1-3',
-              resultCode: 'ALP',
-              resultName: 'Alkaline Phosphatase',
-              unit: 'U/L',
-            },
-            {
-              id: 'res-3-1-4',
-              resultCode: 'TBIL',
-              resultName: 'Total Bilirubin',
-              unit: 'mg/dL',
-            },
-            {
-              id: 'res-3-1-5',
-              resultCode: 'DBIL',
-              resultName: 'Direct Bilirubin',
-              unit: 'mg/dL',
-            },
-            {
-              id: 'res-3-1-6',
-              resultCode: 'ALB',
-              resultName: 'Albumin',
-              unit: 'g/dL',
-            },
-          ],
-        },
-      ],
-    },
-  ];
+  private inMemoryAnalyzers: any[] = [];
 
   async findAllAnalyzers() {
     try {
       if ((this.prisma as any).analyzer) {
-        const list = await (this.prisma as any).analyzer.findMany({
+        return await (this.prisma as any).analyzer.findMany({
           orderBy: { code: 'asc' },
         });
-        if (list && list.length > 0) return list;
       }
     } catch {}
     return this.inMemoryAnalyzers;

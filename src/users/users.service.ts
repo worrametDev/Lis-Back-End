@@ -77,11 +77,12 @@ export class UsersService {
       organization: u.organization || '',
       userRole: u.userRole.replace(/_/g, ' '),
       role: u.userRole.replace(/_/g, ' '),
-      clientSite:
-        u.clientSite?.siteName ||
-        u.parentSite?.siteName ||
-        'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      clientSite: u.clientSite
+        ? (u.clientSite.siteCode ? `${u.clientSite.siteCode} : ${u.clientSite.siteName}` : u.clientSite.siteName)
+        : '',
       clientSiteId: u.clientSiteId || '',
+      clientSiteCode: u.clientSite?.siteCode || '',
+      clientSiteName: u.clientSite?.siteName || '',
       parentSite: u.parentSite?.siteName || 'โรงพยาบาลเสนา',
       parentSiteId: u.parentSiteId || '',
       province: u.province || '',
@@ -166,10 +167,12 @@ export class UsersService {
       fullname: `${user.firstName} ${user.lastName}`.trim(),
       role: user.userRole.replace(/_/g, ' '),
       status: user.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
-      clientSite:
-        user.clientSite?.siteName ||
-        user.parentSite?.siteName ||
-        'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+      clientSite: user.clientSite
+        ? (user.clientSite.siteCode ? `${user.clientSite.siteCode} : ${user.clientSite.siteName}` : user.clientSite.siteName)
+        : '',
+      clientSiteId: user.clientSiteId || '',
+      clientSiteCode: user.clientSite?.siteCode || '',
+      clientSiteName: user.clientSite?.siteName || '',
       parentSite: user.parentSite?.siteName || 'โรงพยาบาลเสนา',
       license: user.licenseNo || '',
       telemedicineAccess: user.telemedicineAccess ?? false,
@@ -224,11 +227,21 @@ export class UsersService {
     let parentSiteId = data.parentSiteId;
     let clientSiteId = data.clientSiteId;
 
-    const targetSite = data.clientSite || data.siteName;
-    if (!clientSiteId && targetSite) {
+    const rawTargetSite = data.clientSite || data.siteName;
+    if (!clientSiteId && rawTargetSite) {
+      const targetSite = String(rawTargetSite).trim();
+      let cleanCode = targetSite;
+      let cleanName = targetSite;
+      if (targetSite.includes(':')) {
+        const parts = targetSite.split(':');
+        cleanCode = parts[0].trim();
+        cleanName = parts.slice(1).join(':').trim();
+      }
       const foundClient = await this.prisma.clientSite.findFirst({
         where: {
           OR: [
+            { siteCode: { equals: cleanCode, mode: 'insensitive' } },
+            { siteName: { contains: cleanName, mode: 'insensitive' } },
             { siteName: { contains: targetSite, mode: 'insensitive' } },
             { siteCode: { equals: targetSite, mode: 'insensitive' } },
           ],
@@ -337,8 +350,12 @@ export class UsersService {
       );
       delete updateData.status;
     }
-    if (updateData.license) {
-      updateData.licenseNo = updateData.license;
+    if (updateData.license !== undefined) {
+      // Map `license` → `licenseNo` (the actual Prisma schema field name)
+      // Always delete `license` regardless of value (even empty string) to avoid Prisma unknown-field error
+      if (updateData.licenseNo === undefined) {
+        updateData.licenseNo = updateData.license;
+      }
       delete updateData.license;
     }
     if (typeof updateData.telemedicineAccess === 'boolean') {
@@ -349,11 +366,21 @@ export class UsersService {
     }
 
     // Resolve clientSite & parentSite by name or code if provided
-    const clientTarget = updateData.clientSite || updateData.siteName;
-    if (clientTarget && !updateData.clientSiteId) {
+    const rawClientTarget = updateData.clientSite || updateData.siteName;
+    if (rawClientTarget && !updateData.clientSiteId) {
+      const clientTarget = String(rawClientTarget).trim();
+      let cleanCode = clientTarget;
+      let cleanName = clientTarget;
+      if (clientTarget.includes(':')) {
+        const parts = clientTarget.split(':');
+        cleanCode = parts[0].trim();
+        cleanName = parts.slice(1).join(':').trim();
+      }
       const foundClient = await this.prisma.clientSite.findFirst({
         where: {
           OR: [
+            { siteCode: { equals: cleanCode, mode: 'insensitive' } },
+            { siteName: { contains: cleanName, mode: 'insensitive' } },
             { siteName: { contains: clientTarget, mode: 'insensitive' } },
             { siteCode: { equals: clientTarget, mode: 'insensitive' } },
           ],
