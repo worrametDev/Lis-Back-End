@@ -113,16 +113,27 @@ export class UploadsController {
               require('sharp');
 
         if (typeof sharpFn === 'function') {
-          storedBuffer = await sharpFn(file.buffer, { failOn: 'none' })
+          const image = sharpFn(file.buffer, { failOn: 'none' })
             .rotate()
             .resize({
               width: 1600,
               height: 1600,
               fit: 'inside',
               withoutEnlargement: true,
-            })
+            });
+          storedBuffer = await image
             .webp({ quality: 80, effort: 4 })
             .toBuffer();
+          if (storedBuffer.length > 220 * 1024) {
+            storedBuffer = await image
+              .webp({ quality: 60, effort: 4 })
+              .toBuffer();
+          }
+          if (storedBuffer.length > 220 * 1024) {
+            storedBuffer = await image
+              .webp({ quality: 45, effort: 4 })
+              .toBuffer();
+          }
           storedMimeType = 'image/webp';
           ext = '.webp';
         }
@@ -213,6 +224,13 @@ export class UploadsController {
       );
     }
 
+    // Serverless/local disks may be discarded between requests. For images,
+    // return the optimized bytes inline so the URL stored in the database
+    // remains self-contained and survives a refresh without persistent disk.
+    const localUrl = isImage
+      ? `data:${storedMimeType};base64,${storedBuffer.toString('base64')}`
+      : `/api/v1/uploads/${filename}`;
+
     return {
       success: true,
       storage: 'local',
@@ -221,7 +239,7 @@ export class UploadsController {
       size: storedBuffer.length,
       originalSize: file.size,
       mimetype: storedMimeType,
-      url: `/api/v1/uploads/${filename}`,
+      url: localUrl,
     };
   }
 }
