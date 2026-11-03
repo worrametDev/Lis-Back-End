@@ -1251,7 +1251,7 @@ export class MasterDataService {
     const item = {
       id: `test-${Date.now()}`,
       code:
-        data.code?.trim().toUpperCase() ||
+        data.code?.trim() ||
         `TEST-${Date.now().toString().slice(-4)}`,
       name: data.name?.trim() || '',
       selectedSites: data.selectedSites || ['ALL'],
@@ -1278,7 +1278,7 @@ export class MasterDataService {
         const updated = await (this.prisma as any).labTest.update({
           where: { id },
           data: {
-            code: data.code?.trim().toUpperCase(),
+            code: data.code?.trim(),
             name: data.name?.trim(),
             selectedSites: data.selectedSites,
             testItems: data.testItems,
