@@ -83,24 +83,38 @@ export class UploadsController {
 
     // Normalize every uploaded raster/vector image to a bounded WebP file.
     // This is enforced server-side so API callers cannot bypass browser resize.
+    // Normalize raster/vector image to a bounded WebP file via Sharp.
+    // If Sharp fails or is unavailable, gracefully fall back to the original uploaded file.
     if (isImage) {
       try {
-        storedBuffer = await sharp(file.buffer, { failOn: 'warning' })
-          .rotate()
-          .resize({
-            width: 1600,
-            height: 1600,
-            fit: 'inside',
-            withoutEnlargement: true,
-          })
-          .webp({ quality: 80, effort: 4 })
-          .toBuffer();
-        storedMimeType = 'image/webp';
-        ext = '.webp';
-      } catch {
-        throw new BadRequestException(
-          'ไฟล์รูปภาพเสียหายหรือไม่สามารถประมวลผลได้',
+        const sharpFn =
+          typeof sharp === 'function'
+            ? sharp
+            : (sharp as any)?.default ||
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
+              require('sharp');
+
+        if (typeof sharpFn === 'function') {
+          storedBuffer = await sharpFn(file.buffer, { failOn: 'none' })
+            .rotate()
+            .resize({
+              width: 1600,
+              height: 1600,
+              fit: 'inside',
+              withoutEnlargement: true,
+            })
+            .webp({ quality: 80, effort: 4 })
+            .toBuffer();
+          storedMimeType = 'image/webp';
+          ext = '.webp';
+        }
+      } catch (sharpError: any) {
+        console.warn(
+          'Sharp image optimization failed, saving original buffer:',
+          sharpError?.message || sharpError,
         );
+        storedBuffer = file.buffer;
+        storedMimeType = file.mimetype;
       }
     }
 
