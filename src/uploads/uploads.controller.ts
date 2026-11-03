@@ -4,6 +4,10 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Get,
+  Param,
+  Res,
+  NotFoundException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -19,11 +23,25 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
+import type { Response } from 'express';
 
 @ApiTags('Uploads')
 @ApiBearerAuth('JWT-auth')
 @Controller('uploads')
 export class UploadsController {
+  @Get(':filename')
+  async getLocalFile(
+    @Param('filename') filename: string,
+    @Res() response: Response,
+  ) {
+    const safeName = path.basename(filename);
+    const filePath = path.join(process.cwd(), 'uploads', safeName);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException('ไม่พบไฟล์รูปภาพในระบบจัดเก็บ');
+    }
+    return response.sendFile(filePath);
+  }
+
   @Post()
   @ApiOperation({
     summary:
@@ -203,7 +221,7 @@ export class UploadsController {
       size: storedBuffer.length,
       originalSize: file.size,
       mimetype: storedMimeType,
-      url: `/uploads/${filename}`,
+      url: `/api/v1/uploads/${filename}`,
     };
   }
 }
