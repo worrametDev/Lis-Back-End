@@ -1,9 +1,11 @@
 import { PrismaClient, UserRole, UserStatus, OrderStatus, SpecimenStatus, ResultFlag } from '@prisma/client';
+import { ensureDefaultMasterData } from '../src/master-data/default-master-data';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
+  await ensureDefaultMasterData(prisma);
   console.log('🌱 Starting database seeding for Healthdi Lab LIS...');
 
   // 1. Create Parent Site (โรงพยาบาลเสนา)

@@ -62,11 +62,12 @@ async function bootstrap() {
   });
 
   const uploadDir = path.join(process.cwd(), 'uploads');
-  if (fs.existsSync(uploadDir)) {
-    app.useStaticAssets(uploadDir, {
-      prefix: '/uploads/',
-    });
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
   }
+  app.useStaticAssets(uploadDir, {
+    prefix: '/uploads/',
+  });
 
   app.setGlobalPrefix('api/v1');
 

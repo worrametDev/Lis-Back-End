@@ -18,6 +18,7 @@ import { memoryStorage } from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
+import sharp from 'sharp';
 
 @ApiTags('Uploads')
 @ApiBearerAuth('JWT-auth')
@@ -72,11 +73,51 @@ export class UploadsController {
       );
     }
 
-    // Sanitize extension and generate cryptographically clean name
-    const ext = path
+    const isImage = file.mimetype.toLowerCase().startsWith('image/');
+    let storedBuffer = file.buffer;
+    let storedMimeType = file.mimetype;
+    let ext = path
       .extname(file.originalname)
       .toLowerCase()
       .replace(/[^a-z0-9.]/g, '');
+
+    // Normalize every uploaded raster/vector image to a bounded WebP file.
+    // This is enforced server-side so API callers cannot bypass browser resize.
+    // Normalize raster/vector image to a bounded WebP file via Sharp.
+    // If Sharp fails or is unavailable, gracefully fall back to the original uploaded file.
+    if (isImage) {
+      try {
+        const sharpFn =
+          typeof sharp === 'function'
+            ? sharp
+            : (sharp as any)?.default ||
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
+              require('sharp');
+
+        if (typeof sharpFn === 'function') {
+          storedBuffer = await sharpFn(file.buffer, { failOn: 'none' })
+            .rotate()
+            .resize({
+              width: 1600,
+              height: 1600,
+              fit: 'inside',
+              withoutEnlargement: true,
+            })
+            .webp({ quality: 80, effort: 4 })
+            .toBuffer();
+          storedMimeType = 'image/webp';
+          ext = '.webp';
+        }
+      } catch (sharpError: any) {
+        console.warn(
+          'Sharp image optimization failed, saving original buffer:',
+          sharpError?.message || sharpError,
+        );
+        storedBuffer = file.buffer;
+        storedMimeType = file.mimetype;
+      }
+    }
+
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const filename = `${file.fieldname}-${uniqueSuffix}${ext}`;
 
@@ -91,8 +132,8 @@ export class UploadsController {
         const supabase = createClient(supabaseUrl, supabaseKey);
         const { error } = await supabase.storage
           .from(bucket)
-          .upload(filename, file.buffer, {
-            contentType: file.mimetype,
+          .upload(filename, storedBuffer, {
+            contentType: storedMimeType,
             upsert: true,
           });
 
@@ -108,8 +149,9 @@ export class UploadsController {
           storage: 'supabase',
           filename,
           originalName: file.originalname,
-          size: file.size,
-          mimetype: file.mimetype,
+          size: storedBuffer.length,
+          originalSize: file.size,
+          mimetype: storedMimeType,
           url: publicUrl,
         };
       } catch (err: any) {
@@ -125,7 +167,7 @@ export class UploadsController {
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
-      fs.writeFileSync(path.join(uploadDir, filename), file.buffer);
+      fs.writeFileSync(path.join(uploadDir, filename), storedBuffer);
     } catch (err) {
       console.warn(
         'Warning: Cannot write to local filesystem (Running on serverless without Supabase Storage):',
@@ -138,8 +180,9 @@ export class UploadsController {
       storage: 'local',
       filename,
       originalName: file.originalname,
-      size: file.size,
-      mimetype: file.mimetype,
+      size: storedBuffer.length,
+      originalSize: file.size,
+      mimetype: storedMimeType,
       url: `/uploads/${filename}`,
     };
   }
