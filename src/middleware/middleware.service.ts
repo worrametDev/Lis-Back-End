@@ -10,6 +10,8 @@ export interface CloudResultPayload {
   instrument: {
     channel: string;
     model: string;
+    deviceId?: string;
+    serialNumber?: string;
   };
   results: Array<{
     testCode: string;
@@ -27,8 +29,6 @@ export interface CloudResultPayload {
 @Injectable()
 export class MiddlewareService {
   private readonly logger = new Logger(MiddlewareService.name);
-  private readonly processedMessageIds = new Set<string>();
-
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
@@ -121,12 +121,12 @@ export class MiddlewareService {
    */
   async receiveResults(siteCode: string, payload: CloudResultPayload) {
     const { messageId, specimenId, instrument, results } = payload;
+    const crypto = await import('crypto');
+    const payloadHash = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
-    // Idempotency check: if this messageId was already processed, respond 409
-    if (this.processedMessageIds.has(messageId)) {
-      this.logger.log(`MessageId ${messageId} already processed (idempotent).`);
-      throw new ConflictException(`Message ${messageId} already processed`);
-    }
+    const prior = await this.prisma.middlewareReceipt.findUnique({ where: { siteCode_messageId: { siteCode, messageId } } });
+    if (prior) { if (prior.payloadHash !== payloadHash) throw new ConflictException(`Message ${messageId} already exists with a different payload`); return prior.responseJson || { success: true, duplicate: true, messageId }; }
+    await this.prisma.middlewareReceipt.create({ data: { siteCode, messageId, specimenId, payloadHash, status: 'RECEIVED' } });
 
     this.logger.log(
       `Received ${results.length} results for Specimen ${specimenId} from ${instrument.model}`,
@@ -174,6 +174,13 @@ export class MiddlewareService {
                 flag: flagEnum,
                 unit: res.unit || existingResult.unit,
                 instrumentName: instrument.model || instrument.channel,
+                instrumentCode: res.instrumentCode || res.testCode,
+                rawValue: res.rawValue || res.value,
+                valueType: res.valueType,
+                resultedAt: res.resultedAt ? new Date(res.resultedAt) : undefined,
+                middlewareMessageId: messageId,
+                middlewareChannel: instrument.channel,
+                middlewareModel: instrument.model,
                 updatedAt: new Date(),
               },
             });
@@ -188,6 +195,13 @@ export class MiddlewareService {
                 flag: flagEnum,
                 unit: res.unit || 'mg/dL',
                 instrumentName: instrument.model || instrument.channel,
+                instrumentCode: res.instrumentCode || res.testCode,
+                rawValue: res.rawValue || res.value,
+                valueType: res.valueType,
+                resultedAt: res.resultedAt ? new Date(res.resultedAt) : undefined,
+                middlewareMessageId: messageId,
+                middlewareChannel: instrument.channel,
+                middlewareModel: instrument.model,
                 status: 'NORMAL',
               },
             });
@@ -212,12 +226,13 @@ export class MiddlewareService {
       );
     }
 
-    this.processedMessageIds.add(messageId);
-    return {
+    const response = {
       success: true,
       specimenId,
       processedCount: results.length,
     };
+    await this.prisma.middlewareReceipt.update({ where: { siteCode_messageId: { siteCode, messageId } }, data: { status: 'PROCESSED', processedAt: new Date(), responseJson: response } });
+    return response;
   }
 
   recordHeartbeat(siteCode: string, telemetry: any) {

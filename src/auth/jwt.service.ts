@@ -8,11 +8,14 @@ export class JwtAuthService {
   private readonly expiresIn: string;
 
   constructor(private readonly config: ConfigService) {
-    this.secret = this.config.get<string>(
-      'JWT_SECRET',
-      'healthdi_lab_secret_jwt_key_2026_sena_hospital_secure',
-    );
-    this.expiresIn = this.config.get<string>('JWT_EXPIRES_IN', '7d');
+    const configuredSecret = this.config.get<string>('JWT_SECRET');
+    if (!configuredSecret || configuredSecret.length < 32) {
+      throw new Error(
+        'JWT_SECRET must be configured and at least 32 characters long',
+      );
+    }
+    this.secret = configuredSecret;
+    this.expiresIn = this.config.get<string>('JWT_EXPIRES_IN', '15m');
   }
 
   sign(payload: object): string {

@@ -82,12 +82,11 @@ export class UploadsController {
       'image/jpeg',
       'image/jpg',
       'image/webp',
-      'image/svg+xml',
       'application/pdf',
     ];
     if (!allowedMimeTypes.includes(file.mimetype.toLowerCase())) {
       throw new BadRequestException(
-        'ประเภทไฟล์ไม่ถูกต้อง อนุญาตเฉพาะรูปภาพ (PNG, JPG, WEBP, SVG) และเอกสาร PDF เท่านั้น',
+        'ประเภทไฟล์ไม่ถูกต้อง อนุญาตเฉพาะรูปภาพ (PNG, JPG, WEBP) และเอกสาร PDF เท่านั้น',
       );
     }
 
@@ -105,12 +104,7 @@ export class UploadsController {
     // If Sharp fails or is unavailable, gracefully fall back to the original uploaded file.
     if (isImage) {
       try {
-        const sharpFn =
-          typeof sharp === 'function'
-            ? sharp
-            : (sharp as any)?.default ||
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
-              require('sharp');
+        const sharpFn = sharp;
 
         if (typeof sharpFn === 'function') {
           const image = sharpFn(file.buffer, { failOn: 'none' })
@@ -138,12 +132,9 @@ export class UploadsController {
           ext = '.webp';
         }
       } catch (sharpError: any) {
-        console.warn(
-          'Sharp image optimization failed, saving original buffer:',
-          sharpError?.message || sharpError,
+        throw new BadRequestException(
+          `ไม่สามารถตรวจสอบหรือปรับขนาดรูปภาพได้: ${sharpError?.message || 'invalid image'}`,
         );
-        storedBuffer = file.buffer;
-        storedMimeType = file.mimetype;
       }
     }
 

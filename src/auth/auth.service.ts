@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtAuthService } from './jwt.service';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
+import { createHash, randomBytes } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -56,8 +57,11 @@ export class AuthService {
       siteId: user.clientSiteId || user.parentSiteId,
     };
 
+    const refreshToken = randomBytes(48).toString('base64url');
+    await this.storeRefreshToken(user.id, refreshToken);
     return {
       accessToken: this.jwtService.sign(payload),
+      refreshToken,
       user: {
         id: user.id,
         username: user.username,
@@ -81,6 +85,57 @@ export class AuthService {
         telemedicineRole: user.telemedicineRole || '',
       },
     };
+  }
+
+  private hashRefreshToken(token: string) {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async storeRefreshToken(userId: string, token: string) {
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await this.prisma.refreshToken.create({
+      data: { userId, tokenHash: this.hashRefreshToken(token), expiresAt },
+    });
+  }
+
+  async refresh(refreshToken: string) {
+    const record = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash: this.hashRefreshToken(refreshToken) },
+      include: { user: true },
+    });
+    if (
+      !record ||
+      record.revokedAt ||
+      record.expiresAt <= new Date() ||
+      record.user.userStatus !== 'ACTIVE'
+    ) {
+      throw new UnauthorizedException('Refresh token ไม่ถูกต้องหรือหมดอายุ');
+    }
+    await this.prisma.refreshToken.update({
+      where: { id: record.id },
+      data: { revokedAt: new Date() },
+    });
+    const nextRefreshToken = randomBytes(48).toString('base64url');
+    await this.storeRefreshToken(record.userId, nextRefreshToken);
+    return {
+      accessToken: this.jwtService.sign({
+        sub: record.user.id,
+        username: record.user.username,
+        role: record.user.userRole,
+        siteId: record.user.clientSiteId || record.user.parentSiteId,
+      }),
+      refreshToken: nextRefreshToken,
+    };
+  }
+
+  async revokeRefreshToken(refreshToken: string) {
+    await this.prisma.refreshToken.updateMany({
+      where: {
+        tokenHash: this.hashRefreshToken(refreshToken),
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
+    });
   }
 
   async getProfile(userId: string) {

@@ -8,6 +8,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { RbacGuard } from './auth/rbac.guard';
 import { UsersModule } from './users/users.module';
 import { MasterDataModule } from './master-data/master-data.module';
 import { OrdersModule } from './orders/orders.module';
@@ -16,6 +17,10 @@ import { WorkstationModule } from './workstation/workstation.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { MiddlewareModule } from './middleware/middleware.module';
+import { AuditService } from './audit/audit.service';
+import { AuditInterceptor } from './audit/audit.interceptor';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { PaginationInterceptor } from './common/pagination.interceptor';
 
 @Module({
   imports: [
@@ -53,6 +58,13 @@ import { MiddlewareModule } from './middleware/middleware.module';
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
+    {
+      provide: APP_GUARD,
+      useClass: RbacGuard,
+    },
+    AuditService,
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: PaginationInterceptor },
   ],
 })
 export class AppModule {}
