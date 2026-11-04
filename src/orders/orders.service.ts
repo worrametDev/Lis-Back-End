@@ -397,9 +397,19 @@ export class OrdersService {
     try {
       await this.cacheManager.del('dashboard_stats');
     } catch {}
-    return this.prisma.order.update({
+    const cancelled = await this.prisma.order.update({
       where: { id },
       data: { status: OrderStatus.CANCELLED },
     });
+    try {
+      await this.cacheManager.del('dashboard_stats');
+      await this.cacheManager.del('workstation_queue');
+      const store: any = (this.cacheManager as any).store;
+      if (store && typeof store.keys === 'function') {
+        const keys = await store.keys('samples_list_*');
+        for (const key of keys) await this.cacheManager.del(key);
+      }
+    } catch {}
+    return cancelled;
   }
 }

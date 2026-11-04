@@ -231,6 +231,7 @@ model User {
   rejectedSamples Sample[]  @relation("RejectedBy")
   approvedResults TestResult[] @relation("ApprovedBy")
   auditLogs       AuditLog[]
+  refreshTokens   RefreshToken[]
 
   @@index([userRole, userStatus])
   @@index([parentSiteId])
@@ -405,6 +406,13 @@ model TestResult {
   repeatResult   String?      // e.g. "4.48"
   status         String?      @default("NORMAL") // Result status เช่น "NORMAL", "CRITICAL", "PENDING"
   instrumentName String?      // ชื่อเครื่องตรวจวิเคราะห์ (Analyzer)
+  instrumentCode String?      // รหัสตรวจที่เครื่องส่งมา เช่น GLU, UBG
+  rawValue      String?      // ค่าดิบก่อน normalize เช่น <1.0↓
+  valueType     String?      // NUMERIC, TEXT, QUALITATIVE
+  resultedAt    DateTime?    // เวลาที่เครื่องตรวจรายงานผล
+  middlewareMessageId String? // Message ID จาก Middleware
+  middlewareChannel  String? // Channel/Device ของ Middleware
+  middlewareModel    String? // รุ่นเครื่องจาก Middleware
 
   // ตรวจสอบและอนุมัติ (Verify & Approve)
   isApproved     Boolean      @default(false)
@@ -427,6 +435,22 @@ model TestResult {
   @@index([isApproved, approvedAt(sort: Desc)])
 }
 
+model MiddlewareReceipt {
+  id          String   @id @default(uuid())
+  siteCode    String
+  messageId   String
+  specimenId  String
+  payloadHash String
+  receivedAt  DateTime @default(now())
+  processedAt DateTime?
+  status      String   @default("RECEIVED") // RECEIVED, PROCESSED, FAILED
+  responseJson Json?
+
+  @@unique([siteCode, messageId])
+  @@index([specimenId, receivedAt(sort: Desc)])
+  @@index([receivedAt(sort: Desc)])
+}
+
 // ----------------------------------------------------
 // 6. AUDIT TRAIL LOGGING
 // ----------------------------------------------------
@@ -447,4 +471,16 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([action])
   @@index([createdAt(sort: Desc)])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
 }

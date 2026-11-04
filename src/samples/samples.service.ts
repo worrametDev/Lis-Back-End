@@ -92,7 +92,10 @@ export class SamplesService {
       id: s.id,
       orderId: s.orderId,
       no: idx + 1,
-      status: s.status,
+      // A cancelled order supersedes the specimen workflow status. Samples
+      // intentionally keep their clinical enum unchanged, so expose the
+      // order cancellation state to receiving screens without a schema change.
+      status: s.order.status === OrderStatus.CANCELLED ? 'CANCELLED' : s.status,
       created: s.createdAt.toLocaleDateString('th-TH', {
         day: '2-digit',
         month: '2-digit',
@@ -115,6 +118,9 @@ export class SamplesService {
         s.testResults?.[0]?.testPanel ||
         s.testResults?.[0]?.testName ||
         '',
+      // Prefer the concrete Test/Result name for barcode labels. A panel is
+      // only a grouping and should not be printed as the tube's test label.
+      testName: s.testResults?.[0]?.testName || '',
       healthcareEntitlement:
         s.order.entitlement || '',
       urgentStatus: s.urgentStatus || s.order.urgentStatus || 'NORMAL',

@@ -94,27 +94,71 @@ export class AuthController {
       secure: isProd,
       sameSite: sameSiteMode,
       path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 15 * 60 * 1000,
+    });
+    res.cookie('healthdi_refresh', result.refreshToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: sameSiteMode,
+      path: '/auth',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
-    return result;
+    const { refreshToken: _refreshToken, ...safeResult } = result;
+    return safeResult;
   }
 
   @Public()
   @Post('logout')
   @ApiOperation({ summary: 'ออกจากระบบ (Logout) และทำลาย HttpOnly Cookie' })
   @ApiResponse({ status: 200, description: 'ออกจากระบบสำเร็จ' })
-  async logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const isProd = process.env.NODE_ENV === 'production';
     const sameSiteMode = isProd ? ('none' as const) : ('lax' as const);
 
+    const refreshToken = req.cookies?.healthdi_refresh;
+    if (refreshToken) await this.authService.revokeRefreshToken(refreshToken);
     res.clearCookie('healthdi_token', {
       httpOnly: true,
       secure: isProd,
       sameSite: sameSiteMode,
       path: '/',
     });
+    res.clearCookie('healthdi_refresh', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: sameSiteMode,
+      path: '/auth',
+    });
     return { success: true, message: 'ออกจากระบบเรียบร้อยแล้ว' };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Post('refresh')
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = req.cookies?.healthdi_refresh;
+    if (!token) throw new UnauthorizedException('ไม่พบ refresh token');
+    const result = await this.authService.refresh(token);
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie('healthdi_token', result.accessToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      path: '/',
+      maxAge: 15 * 60 * 1000,
+    });
+    res.cookie('healthdi_refresh', result.refreshToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      path: '/auth',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+    return { accessToken: result.accessToken };
   }
 
   @Get('me')

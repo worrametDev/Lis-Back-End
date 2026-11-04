@@ -25,7 +25,10 @@ export class MiddlewareController {
   }
 
   private verifyAuth(apiKey?: string) {
-    const requiredKey = this.expectedApiKey || 'healthdi_sec_live_sena00940';
+    const requiredKey = this.expectedApiKey;
+    if (!requiredKey) {
+      throw new UnauthorizedException('Middleware API key is not configured');
+    }
     if (!apiKey || apiKey !== requiredKey) {
       throw new UnauthorizedException(
         'Invalid or missing X-Api-Key for Middleware Ingestion',
@@ -59,17 +62,23 @@ export class MiddlewareController {
     @Body() payload?: CloudResultPayload,
   ) {
     const timestamp = new Date().toISOString();
-    console.log(`\n================== [BACKEND INGESTION API: POST /middleware/results] ==================`);
+    console.log(
+      `\n================== [BACKEND INGESTION API: POST /middleware/results] ==================`,
+    );
     console.log(`⏱️ Timestamp   : ${timestamp}`);
     console.log(`🏥 Site Code   : ${siteCode || '00940'}`);
     console.log(`🔑 Message ID  : ${payload?.messageId}`);
     console.log(`🏷️ Specimen ID : ${payload?.specimenId}`);
-    console.log(`🔬 Instrument  : ${payload?.instrument?.channel} (${payload?.instrument?.model})`);
+    console.log(
+      `🔬 Instrument  : ${payload?.instrument?.channel} (${payload?.instrument?.model})`,
+    );
     console.log(`🧪 Results (${payload?.results?.length || 0} items):`);
     console.log(JSON.stringify(payload?.results, null, 2));
     console.log(`📦 Full Raw Payload:`);
     console.log(JSON.stringify(payload, null, 2));
-    console.log(`========================================================================================\n`);
+    console.log(
+      `========================================================================================\n`,
+    );
 
     this.verifyAuth(apiKey);
     return this.middlewareService.receiveResults(
