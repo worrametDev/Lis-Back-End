@@ -375,6 +375,7 @@ model Sample {
   @@index([barcode])
   @@index([createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
+  @@index([status, receivedAt(sort: Desc)])
   @@index([sampleConditionId])
 }
 
@@ -433,6 +434,7 @@ model TestResult {
   @@index([testName, isVoided, createdAt(sort: Desc)])
   @@index([departmentId])
   @@index([isApproved, approvedAt(sort: Desc)])
+  @@index([sampleId, isApproved, isVoided, approvedAt(sort: Desc)])
 }
 
 model MiddlewareReceipt {
@@ -471,6 +473,7 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([action])
   @@index([createdAt(sort: Desc)])
+  @@index([action, entityId, createdAt(sort: Desc)])
 }
 
 model RefreshToken {
