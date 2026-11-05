@@ -47,6 +47,10 @@ async function bootstrap() {
     ? rawOrigins.split(',').map((o) => o.trim())
     : [];
 
+  if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
+    throw new Error('CORS_ORIGIN must be configured in production');
+  }
+
   app.enableCors({
     origin: (origin, callback) => {
       // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
