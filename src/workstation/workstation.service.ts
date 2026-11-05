@@ -11,73 +11,98 @@ export class WorkstationService {
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
-  async getQueue() {
-    const cacheKey = 'workstation_queue';
-    const cached = await this.cacheManager.get<any[]>(cacheKey);
+  async getQueue(query?: { page?: number; pageSize?: number }) {
+    const page = Math.max(1, Number(query?.page) || 1);
+    const pageSize = Math.min(200, Math.max(1, Number(query?.pageSize) || 50));
+    const cacheKey = `workstation_queue_${page}_${pageSize}`;
+    const cached = await this.cacheManager.get<any>(cacheKey);
     if (cached) return cached;
 
-    const samples = await this.prisma.sample.findMany({
-      where: {
-        status: {
-          in: [
-            SpecimenStatus.RECEIVED,
-            SpecimenStatus.IN_PROCESS,
-            SpecimenStatus.VERIFIED,
-            SpecimenStatus.APPROVED,
-          ],
-        },
+    const where = {
+      status: {
+        in: [
+          SpecimenStatus.RECEIVED,
+          SpecimenStatus.IN_PROCESS,
+          SpecimenStatus.VERIFIED,
+          SpecimenStatus.APPROVED,
+        ],
       },
-      include: {
-        order: {
-          include: {
-            clientSite: true,
-            parentSite: true,
-            ward: true,
-            samples: true,
+    };
+    const [samples, total] = await Promise.all([
+      this.prisma.sample.findMany({
+        where,
+        include: {
+          order: {
+            include: {
+              clientSite: true,
+              parentSite: true,
+              ward: true,
+              samples: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.sample.count({ where }),
+    ]);
 
-    const result = await Promise.all(samples.map(async (s, idx) => {
-      // In case an order has multiple samples / specimen types, join distinct values with a comma
-      const orderSpecimenTypes =
-        s.order?.samples && s.order.samples.length > 0
-          ? Array.from(
-              new Set(
-                s.order.samples.map((sm) => sm.specimenType).filter(Boolean),
-              ),
-            ).join(', ')
-          : s.specimenType;
+    const result = await Promise.all(
+      samples.map(async (s, idx) => {
+        // In case an order has multiple samples / specimen types, join distinct values with a comma
+        const orderSpecimenTypes =
+          s.order?.samples && s.order.samples.length > 0
+            ? Array.from(
+                new Set(
+                  s.order.samples.map((sm) => sm.specimenType).filter(Boolean),
+                ),
+              ).join(', ')
+            : s.specimenType;
 
-      const approved = await this.prisma.testResult.findFirst({ where: { sampleId: s.id, isApproved: true, isVoided: false }, include: { approvedBy: true }, orderBy: { approvedAt: 'desc' } });
-      const report = await this.prisma.auditLog.findFirst({ where: { action: 'REPORT_RESULTS', entityId: s.id }, include: { user: true }, orderBy: { createdAt: 'desc' } });
-      return {
-        parentSite: s.order.parentSite?.siteName || '',
-        clientSiteCode: s.order.clientSite?.siteCode || '',
-        receivedAt: s.receivedAt,
-        reportedAt: report?.createdAt || null,
-        reportedBy: report?.user ? [report.user.firstName, report.user.lastName].join(' ').trim() : '',
-        approvedAt: approved?.approvedAt || null,
-        approvedBy: approved?.approvedBy ? [approved.approvedBy.firstName, approved.approvedBy.lastName].join(' ').trim() : '',
-        no: idx + 1,
-        hn: s.order.hn,
-        labNo: s.labNumber,
-        sampleId: s.id,
-        patientName: s.order.patientName,
-        clientSite:
-          s.order.clientSite?.siteName ||
-          '',
-        ward: s.order.ward?.wardName || '',
-        specimenType: orderSpecimenTypes || s.specimenType,
-        status: s.status,
-      };
-    }));
+        const approved = await this.prisma.testResult.findFirst({
+          where: { sampleId: s.id, isApproved: true, isVoided: false },
+          include: { approvedBy: true },
+          orderBy: { approvedAt: 'desc' },
+        });
+        const report = await this.prisma.auditLog.findFirst({
+          where: { action: 'REPORT_RESULTS', entityId: s.id },
+          include: { user: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        return {
+          parentSite: s.order.parentSite?.siteName || '',
+          clientSiteCode: s.order.clientSite?.siteCode || '',
+          receivedAt: s.receivedAt,
+          reportedAt: report?.createdAt || null,
+          reportedBy: report?.user
+            ? [report.user.firstName, report.user.lastName].join(' ').trim()
+            : '',
+          approvedAt: approved?.approvedAt || null,
+          approvedBy: approved?.approvedBy
+            ? [approved.approvedBy.firstName, approved.approvedBy.lastName]
+                .join(' ')
+                .trim()
+            : '',
+          no: idx + 1,
+          hn: s.order.hn,
+          labNo: s.labNumber,
+          sampleId: s.id,
+          patientName: s.order.patientName,
+          clientSite: s.order.clientSite?.siteName || '',
+          ward: s.order.ward?.wardName || '',
+          specimenType: orderSpecimenTypes || s.specimenType,
+          status: s.status,
+        };
+      }),
+    );
 
-    await this.cacheManager.set(cacheKey, result, 15000);
-    return result;
+    const response = {
+      data: result,
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
+    await this.cacheManager.set(cacheKey, response, 15000);
+    return response;
   }
 
   async getResults(sampleId: string) {
@@ -128,7 +153,7 @@ export class WorkstationService {
           testResult: { not: null },
           sample: {
             id: { not: sampleId },
-            createdAt: {lt: currentSample!.createdAt},
+            createdAt: { lt: currentSample!.createdAt },
             order: {
               hn,
               ...(clientSiteId ? { clientSiteId } : {}),
@@ -166,7 +191,11 @@ export class WorkstationService {
         refRange: r.referenceRange || '',
         repeatResult: r.repeatResult || '',
         isApproved: r.isApproved,
-        status: r.isApproved ? 'Approved' : r.status === 'REPORTED' ? 'Reported' : 'Received',
+        status: r.isApproved
+          ? 'Approved'
+          : r.status === 'REPORTED'
+            ? 'Reported'
+            : 'Received',
         isPendingRepeat: r.status === 'PENDING_REPEAT',
       };
     });
@@ -325,6 +354,11 @@ export class WorkstationService {
       await this.cacheManager.del(`workstation_results_${sampleId}`);
       await this.cacheManager.del('dashboard_stats');
       await this.cacheManager.del('workstation_queue');
+      const store: any = (this.cacheManager as any).store;
+      if (store && typeof store.keys === 'function') {
+        const keys = await store.keys('workstation_queue_*');
+        for (const key of keys) await this.cacheManager.del(key);
+      }
       await this.prisma.sample.update({
         where: { id: sampleId },
         data: { status: SpecimenStatus.APPROVED },
@@ -424,7 +458,9 @@ export class WorkstationService {
     if (data.sampleId) {
       await this.cacheManager.del(`workstation_results_${data.sampleId}`);
       const targetSpecimenStatus = data.targetStatus
-        ? ((data.targetStatus === 'REPORTED' ? 'VERIFIED' : data.targetStatus) as SpecimenStatus)
+        ? ((data.targetStatus === 'REPORTED'
+            ? 'VERIFIED'
+            : data.targetStatus) as SpecimenStatus)
         : SpecimenStatus.IN_PROCESS;
 
       await this.prisma.sample.update({

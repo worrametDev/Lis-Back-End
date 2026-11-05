@@ -24,6 +24,21 @@ export class RbacGuard implements CanActivate {
     if (role === 'SYSTEM_ADMINISTRATOR') return true;
     const path = String(request.route?.path || request.path || '');
 
+    // Client users may mutate only records belonging to their assigned site.
+    // Read requests remain available for filtering and queue visibility.
+    if (role === 'CLIENT_SITE_USER') {
+      const assignedSite = String(
+        user.clientSiteId || user.clientSite?.id || user.siteId || '',
+      );
+      const payload = request.body || {};
+      const requestedSite = String(
+        payload.clientSiteId || payload.siteId || payload.clientSite?.id || '',
+      );
+      if (assignedSite && requestedSite && assignedSite !== requestedSite) {
+        throw new ForbiddenException('ไม่สามารถดำเนินการข้าม Client Site ได้');
+      }
+    }
+
     if (path.startsWith('/auth/') || path.startsWith('/middleware/'))
       return true;
     if (path.startsWith('/users')) {

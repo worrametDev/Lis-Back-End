@@ -43,7 +43,7 @@ export class AuthService {
       orderBy: { createdAt: 'asc' },
     });
     return (
-      primarySite?.siteName || process.env.HOSPITAL_NAME || 'โรงพยาบาลเสนา'
+      primarySite?.siteName || process.env.HOSPITAL_NAME || ''
     );
   }
 
@@ -75,7 +75,7 @@ export class AuthService {
         parentSiteId: user.parentSiteId || '',
         clientSite:
           user.clientSite?.siteName ||
-          'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+          '',
         clientSiteId: user.clientSiteId || '',
         licenseNo: user.licenseNo || '',
         province: user.province || '',
@@ -159,7 +159,7 @@ export class AuthService {
       parentSite: user.parentSite?.siteName || defaultParent,
       parentSiteId: user.parentSiteId || '',
       clientSite:
-        user.clientSite?.siteName || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+        user.clientSite?.siteName || '',
       clientSiteId: user.clientSiteId || '',
       licenseNo: user.licenseNo || '',
       province: user.province || '',

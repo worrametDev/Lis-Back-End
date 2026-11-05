@@ -392,7 +392,7 @@ export class MasterDataService {
       id: s.id,
       siteCode: s.siteCode,
       siteName: s.siteName,
-      parentSiteName: s.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSiteName: s.parentSite?.siteName || '',
       parentSiteId: s.parentSiteId,
       parentSiteCode: s.parentSite?.siteCode || '',
       parentSiteStatus: s.parentSite?.siteStatus || 'Active',
@@ -586,7 +586,7 @@ export class MasterDataService {
     await this.cacheManager.del('user_options');
     return {
       ...updated,
-      parentSiteName: updated.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSiteName: updated.parentSite?.siteName || '',
       parentSiteCode: updated.parentSite?.siteCode || '',
       parentSiteStatus: updated.parentSite?.siteStatus || 'Active',
     };
@@ -634,7 +634,7 @@ export class MasterDataService {
       id: w.id,
       wardCode: w.wardCode,
       wardName: w.wardName,
-      hospitalName: w.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      hospitalName: w.parentSite?.siteName || '',
       wardStatus: w.wardStatus || 'Active',
       parentSiteId: w.parentSiteId,
       selectedSites: w.selectedSites,
@@ -1144,98 +1144,36 @@ export class MasterDataService {
   }
 
   // ==========================================
-  // 9. VALUE LISTS (Database Persisted with Fallback)
+  // 9. VALUE LISTS (Database Persisted)
   // ==========================================
-  private inMemoryValueLists: any[] = [
-    { id: 'vl-1', code: 'POS', name: 'Positive', status: 'Active' },
-    { id: 'vl-2', code: 'NEG', name: 'Negative', status: 'Active' },
-    { id: 'vl-3', code: 'EQV', name: 'Equivocal', status: 'Active' },
-    { id: 'vl-4', code: 'REAC', name: 'Reactive', status: 'Active' },
-    { id: 'vl-5', code: 'NONREAC', name: 'Non-Reactive', status: 'Active' },
-    { id: 'vl-6', code: 'FOUND', name: 'Found', status: 'Active' },
-    { id: 'vl-7', code: 'NOTFOUND', name: 'Not Found', status: 'Active' },
-    { id: 'vl-8', code: 'YELLOW', name: 'Yellow', status: 'Active' },
-    { id: 'vl-9', code: 'AMBER', name: 'Amber', status: 'Active' },
-    { id: 'vl-10', code: 'BLOODY', name: 'Bloody', status: 'Active' },
-    { id: 'vl-11', code: 'SOFT', name: 'Soft', status: 'Active' },
-    { id: 'vl-12', code: 'FORMED', name: 'Formed', status: 'Active' },
-    { id: 'vl-13', code: 'WATERY', name: 'Watery', status: 'Active' },
-    { id: 'vl-14', code: 'MUCOUS', name: 'Mucous', status: 'Active' },
-  ];
-
   async findAllValueLists() {
-    try {
-      if ((this.prisma as any).valueList) {
-        const list = await (this.prisma as any).valueList.findMany({
-          orderBy: { code: 'asc' },
-        });
-        if (list && list.length > 0) return list;
-      }
-    } catch {}
-    return this.inMemoryValueLists;
+    return this.prisma.valueList.findMany({ orderBy: { code: 'asc' } });
   }
 
   async createValueList(data: any) {
-    const item = {
-      id: `vl-${Date.now()}`,
-      code: data.code?.trim() || `VL-${Date.now().toString().slice(-4)}`,
-      name: data.name?.trim() || '',
+    return this.prisma.valueList.create({ data: {
+      code: String(data.code || '').trim(),
+      name: String(data.name || '').trim(),
       status: data.status || 'Active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    try {
-      if ((this.prisma as any).valueList) {
-        const created = await (this.prisma as any).valueList.create({
-          data: item,
-        });
-        if (created) return created;
-      }
-    } catch {}
-    this.inMemoryValueLists.unshift(item);
-    return item;
+    } });
   }
 
   async updateValueList(id: string, data: any) {
-    try {
-      if ((this.prisma as any).valueList) {
-        const updated = await (this.prisma as any).valueList.update({
-          where: { id },
-          data: {
-            code: data.code,
-            name: data.name,
-            status: data.status,
-          },
-        });
-        if (updated) return updated;
-      }
-    } catch {}
-    this.inMemoryValueLists = this.inMemoryValueLists.map((vl) =>
-      vl.id === id
-        ? { ...vl, ...data, updatedAt: new Date().toISOString() }
-        : vl,
-    );
-    return this.inMemoryValueLists.find((vl) => vl.id === id);
+    return this.prisma.valueList.update({ where: { id }, data: {
+      code: data.code,
+      name: data.name,
+      status: data.status,
+    } });
   }
 
   async deleteValueList(id: string) {
-    try {
-      if ((this.prisma as any).valueList) {
-        await (this.prisma as any).valueList.delete({ where: { id } });
-        return { success: true };
-      }
-    } catch {}
-    this.inMemoryValueLists = this.inMemoryValueLists.filter(
-      (vl) => vl.id !== id,
-    );
+    await this.prisma.valueList.delete({ where: { id } });
     return { success: true };
   }
 
   // ==========================================
-  // 10. LAB TESTS & SUB-ITEMS (Database Persisted with Fallback)
+  // 10. LAB TESTS & SUB-ITEMS (Database Persisted)
   // ==========================================
-  private inMemoryTests: any[] = [];
-
   async findAllTests() {
     try {
       if ((this.prisma as any).labTest) {
@@ -1244,7 +1182,7 @@ export class MasterDataService {
         });
       }
     } catch {}
-    return this.inMemoryTests;
+    throw new BadRequestException('ไม่สามารถโหลด Test จากฐานข้อมูลได้');
   }
 
   async createTest(data: any) {
@@ -1268,8 +1206,7 @@ export class MasterDataService {
         if (created) return created;
       }
     } catch {}
-    this.inMemoryTests.unshift(item);
-    return item;
+    throw new BadRequestException('ไม่สามารถบันทึก Test ลงฐานข้อมูลได้');
   }
 
   async updateTest(id: string, data: any) {
@@ -1288,10 +1225,7 @@ export class MasterDataService {
         if (updated) return updated;
       }
     } catch {}
-    this.inMemoryTests = this.inMemoryTests.map((t) =>
-      t.id === id ? { ...t, ...data, updatedAt: new Date().toISOString() } : t,
-    );
-    return this.inMemoryTests.find((t) => t.id === id);
+    throw new BadRequestException('ไม่สามารถแก้ไข Test ในฐานข้อมูลได้');
   }
 
   async deleteTest(id: string) {
@@ -1301,9 +1235,6 @@ export class MasterDataService {
         test = await (this.prisma as any).labTest.findUnique({ where: { id } });
       }
     } catch {}
-    if (!test) {
-      test = this.inMemoryTests.find((t) => t.id === id);
-    }
     if (test) {
       const linkedResults = await this.prisma.testResult.count({
         where: {
@@ -1323,15 +1254,12 @@ export class MasterDataService {
         return { success: true };
       }
     } catch {}
-    this.inMemoryTests = this.inMemoryTests.filter((t) => t.id !== id);
-    return { success: true };
+    throw new BadRequestException('ไม่สามารถลบ Test จากฐานข้อมูลได้');
   }
 
   // ==========================================
-  // 11. TEST PROFILES (Database Persisted with Fallback)
+  // 11. TEST PROFILES (Database Persisted)
   // ==========================================
-  private inMemoryProfiles: any[] = [];
-
   async findAllTestProfiles() {
     try {
       if ((this.prisma as any).testProfile) {
@@ -1340,7 +1268,7 @@ export class MasterDataService {
         });
       }
     } catch {}
-    return this.inMemoryProfiles;
+    throw new BadRequestException('ไม่สามารถโหลด Test Profile จากฐานข้อมูลได้');
   }
 
   async createTestProfile(data: any) {
@@ -1364,8 +1292,7 @@ export class MasterDataService {
         if (created) return created;
       }
     } catch {}
-    this.inMemoryProfiles.unshift(item);
-    return item;
+    throw new BadRequestException('ไม่สามารถบันทึก Test Profile ลงฐานข้อมูลได้');
   }
 
   async updateTestProfile(id: string, data: any) {
@@ -1384,10 +1311,7 @@ export class MasterDataService {
         if (updated) return updated;
       }
     } catch {}
-    this.inMemoryProfiles = this.inMemoryProfiles.map((p) =>
-      p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p,
-    );
-    return this.inMemoryProfiles.find((p) => p.id === id);
+    throw new BadRequestException('ไม่สามารถแก้ไข Test Profile ในฐานข้อมูลได้');
   }
 
   async deleteTestProfile(id: string) {
@@ -1397,15 +1321,12 @@ export class MasterDataService {
         return { success: true };
       }
     } catch {}
-    this.inMemoryProfiles = this.inMemoryProfiles.filter((p) => p.id !== id);
-    return { success: true };
+    throw new BadRequestException('ไม่สามารถลบ Test Profile จากฐานข้อมูลได้');
   }
 
   // ==========================================
-  // 12. ANALYZERS (Database Persisted with Fallback)
+  // 12. ANALYZERS (Database Persisted)
   // ==========================================
-  private inMemoryAnalyzers: any[] = [];
-
   async findAllAnalyzers() {
     try {
       if ((this.prisma as any).analyzer) {
@@ -1414,7 +1335,7 @@ export class MasterDataService {
         });
       }
     } catch {}
-    return this.inMemoryAnalyzers;
+    throw new BadRequestException('ไม่สามารถโหลด Analyzer จากฐานข้อมูลได้');
   }
 
   async createAnalyzer(data: any) {
@@ -1441,8 +1362,7 @@ export class MasterDataService {
         if (created) return created;
       }
     } catch {}
-    this.inMemoryAnalyzers.unshift(item);
-    return item;
+    throw new BadRequestException('ไม่สามารถบันทึก Analyzer ลงฐานข้อมูลได้');
   }
 
   async updateAnalyzer(id: string, data: any) {
@@ -1464,10 +1384,7 @@ export class MasterDataService {
         if (updated) return updated;
       }
     } catch {}
-    this.inMemoryAnalyzers = this.inMemoryAnalyzers.map((a) =>
-      a.id === id ? { ...a, ...data, updatedAt: new Date().toISOString() } : a,
-    );
-    return this.inMemoryAnalyzers.find((a) => a.id === id);
+    throw new BadRequestException('ไม่สามารถแก้ไข Analyzer ในฐานข้อมูลได้');
   }
 
   async deleteAnalyzer(id: string) {
@@ -1479,9 +1396,6 @@ export class MasterDataService {
         });
       }
     } catch {}
-    if (!analyzer) {
-      analyzer = this.inMemoryAnalyzers.find((a) => a.id === id);
-    }
     if (analyzer) {
       const linkedResults = await this.prisma.testResult.count({
         where: {
@@ -1504,8 +1418,7 @@ export class MasterDataService {
         return { success: true };
       }
     } catch {}
-    this.inMemoryAnalyzers = this.inMemoryAnalyzers.filter((a) => a.id !== id);
-    return { success: true };
+    throw new BadRequestException('ไม่สามารถลบ Analyzer จากฐานข้อมูลได้');
   }
 
   // ==========================================

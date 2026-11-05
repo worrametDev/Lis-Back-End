@@ -54,6 +54,8 @@ export class SamplesController {
     required: false,
     description: 'กรองถึงวันที่ตรวจรับ (YYYY-MM-DD)',
   })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'คืนค่ารายการสิ่งส่งตรวจ' })
   findAll(
     @Query('status') status?: string,
@@ -63,6 +65,8 @@ export class SamplesController {
     @Query('createdTo') createdTo?: string,
     @Query('receivedFrom') receivedFrom?: string,
     @Query('receivedTo') receivedTo?: string,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
   ) {
     return this.samplesService.findAll({
       status,
@@ -72,6 +76,8 @@ export class SamplesController {
       createdTo,
       receivedFrom,
       receivedTo,
+      page,
+      pageSize,
     });
   }
 

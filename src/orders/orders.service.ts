@@ -25,6 +25,8 @@ export class OrdersService {
     hn?: string;
     createdFrom?: string;
     createdTo?: string;
+    page?: number;
+    pageSize?: number;
   }) {
     const cacheKey = `orders_list_${JSON.stringify(query || {})}`;
     const cached = await this.cacheManager.get<any[]>(cacheKey);
@@ -59,27 +61,38 @@ export class OrdersService {
       }
     }
 
-    const orders = await this.prisma.order.findMany({
-      where,
-      include: {
-        clientSite: true,
-        parentSite: true,
-        ward: true,
-        samples: {
-          where: { OR: [{rejectionReason: null}, {rejectionReason: {not: 'Order items updated'}}] },
-          select: {
-            id: true,
-            labNumber: true,
-            specimenType: true,
-            profileTestName: true,
-            receivedAt: true,
-            status: true,
+    const page = Math.max(1, Number(query?.page) || 1);
+    const pageSize = Math.min(200, Math.max(1, Number(query?.pageSize) || 50));
+    const [orders, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        include: {
+          clientSite: true,
+          parentSite: true,
+          ward: true,
+          samples: {
+            where: {
+              OR: [
+                { rejectionReason: null },
+                { rejectionReason: { not: 'Order items updated' } },
+              ],
+            },
+            select: {
+              id: true,
+              labNumber: true,
+              specimenType: true,
+              profileTestName: true,
+              receivedAt: true,
+              status: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.order.count({ where }),
+    ]);
 
     const result = orders.map((o, idx) => {
       const firstSample = o.samples[0];
@@ -99,8 +112,7 @@ export class OrdersService {
               year: 'numeric',
             })
           : '-',
-        clientSite:
-          o.clientSite?.siteName || '',
+        clientSite: o.clientSite?.siteName || '',
         clientSiteId: o.clientSiteId,
         siteCode: o.clientSite?.siteCode || '',
         siteName: o.clientSite?.siteName || '',
@@ -136,18 +148,19 @@ export class OrdersService {
         passport: o.passportNo || '',
         specimenType: firstSample?.specimenType || '',
         testName:
-          firstSample?.profileTestName ||
-          o.testProfile ||
-          o.testPanel ||
-          '',
+          firstSample?.profileTestName || o.testProfile || o.testPanel || '',
         orderItems: o.orderItems || [],
         samples: o.samples,
         samplesCount: o.samples.length,
       };
     });
 
-    await this.cacheManager.set(cacheKey, result, 15000);
-    return result;
+    const response = {
+      data: result,
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
+    await this.cacheManager.set(cacheKey, response, 15000);
+    return response;
   }
 
   async invalidateCache() {
@@ -276,121 +289,200 @@ export class OrdersService {
     const rawOrderItems = Array.isArray(data.orderItems) ? data.orderItems : [];
     const resolved = await this.catalog.resolve(rawOrderItems);
     const profileTestName = rawOrderItems[0]?.testName || '';
-    return this.prisma.$transaction(async (tx) => {
-    // Create Order in transaction
-    const order = await tx.order.create({
-      data: {
-        hn: data.hn,
-        patientName: data.patientName,
-        idCard: data.idCard || '',
-        passportNo: data.passportNo || data.passport || '',
-        title: data.title,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        gender: data.gender,
-        dob: data.dob,
-        age: data.age,
-        nationality: data.nationality || '',
-        ethnicity: data.ethnicity || '',
-        address: data.address,
-        subdistrict: data.subdistrict,
-        district: data.district,
-        province: data.province,
-        zipcode: data.zipcode,
-        telephone: data.telephone,
-        patientType: data.patientType || 'OPD',
-        entitlement: data.entitlement || '',
-        collectedDate: data.collectedDate,
-        urgentStatus: data.urgentStatus || 'NORMAL',
-        testPanel: data.testPanel,
-        testProfile: data.testProfile,
-        testItem: data.testItem,
-        orderItems: rawOrderItems,
-        clientSiteId: clientSite.id,
-        parentSiteId,
-        wardId,
-        status: OrderStatus.REGISTERED,
+    return this.prisma.$transaction(
+      async (tx) => {
+        // Create Order in transaction
+        const order = await tx.order.create({
+          data: {
+            hn: data.hn,
+            patientName: data.patientName,
+            idCard: data.idCard || '',
+            passportNo: data.passportNo || data.passport || '',
+            title: data.title,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            gender: data.gender,
+            dob: data.dob,
+            age: data.age,
+            nationality: data.nationality || '',
+            ethnicity: data.ethnicity || '',
+            address: data.address,
+            subdistrict: data.subdistrict,
+            district: data.district,
+            province: data.province,
+            zipcode: data.zipcode,
+            telephone: data.telephone,
+            patientType: data.patientType || 'OPD',
+            entitlement: data.entitlement || '',
+            collectedDate: data.collectedDate,
+            urgentStatus: data.urgentStatus || 'NORMAL',
+            testPanel: data.testPanel,
+            testProfile: data.testProfile,
+            testItem: data.testItem,
+            orderItems: rawOrderItems,
+            clientSiteId: clientSite.id,
+            parentSiteId,
+            wardId,
+            status: OrderStatus.REGISTERED,
+          },
+          include: {
+            clientSite: true,
+            parentSite: true,
+            ward: true,
+          },
+        });
+
+        const createdSamples = await this.catalog.createSamples(
+          tx,
+          order.id,
+          resolved,
+          data.urgentStatus,
+        );
+
+        try {
+          await this.cacheManager.del('dashboard_stats');
+          await this.cacheManager.del('samples_list_{}');
+          await this.cacheManager.del('workstation_queue');
+          await this.invalidateCache();
+        } catch {}
+
+        const firstSample = createdSamples[0];
+        return {
+          ...order,
+          id: order.id,
+          no: 1,
+          status: 'Registered',
+          created: order.createdAt.toLocaleDateString('th-TH'),
+          received: '-',
+          clientSite: order.clientSite?.siteName || '',
+          clientSiteId: order.clientSiteId,
+          siteCode: order.clientSite?.siteCode || '',
+          siteName: order.clientSite?.siteName || '',
+          parentSite: order.parentSite?.siteName || '',
+          parentSiteCode: order.parentSite?.siteCode || '',
+          parentSiteName: order.parentSite?.siteName || '',
+          hn: order.hn,
+          labNo: firstSample?.labNumber || '',
+          sampleId: firstSample?.id,
+          patientName: order.patientName,
+          specimenType: firstSample?.specimenType || data.specimenType || '',
+          testName: firstSample?.profileTestName || profileTestName,
+          ward: order.ward?.wardName || order.patientType || 'OPD',
+          urgentStatus: order.urgentStatus || 'NORMAL',
+          orderItems: rawOrderItems,
+          samples: createdSamples,
+        };
       },
-      include: {
-        clientSite: true,
-        parentSite: true,
-        ward: true,
-      },
-    });
-
-    const createdSamples = await this.catalog.createSamples(tx, order.id, resolved, data.urgentStatus);
-
-    try {
-      await this.cacheManager.del('dashboard_stats');
-      await this.cacheManager.del('samples_list_{}');
-      await this.cacheManager.del('workstation_queue');
-      await this.invalidateCache();
-    } catch {}
-
-    const firstSample = createdSamples[0];
-    return {
-      ...order,
-      id: order.id,
-      no: 1,
-      status: 'Registered',
-      created: order.createdAt.toLocaleDateString('th-TH'),
-      received: '-',
-      clientSite:
-        order.clientSite?.siteName || '',
-      clientSiteId: order.clientSiteId,
-      siteCode: order.clientSite?.siteCode || '',
-      siteName: order.clientSite?.siteName || '',
-      parentSite: order.parentSite?.siteName || '',
-      parentSiteCode: order.parentSite?.siteCode || '',
-      parentSiteName: order.parentSite?.siteName || '',
-      hn: order.hn,
-      labNo: firstSample?.labNumber || '',
-      sampleId: firstSample?.id,
-      patientName: order.patientName,
-      specimenType:
-        firstSample?.specimenType || data.specimenType || '',
-      testName: firstSample?.profileTestName || profileTestName,
-      ward: order.ward?.wardName || order.patientType || 'OPD',
-      urgentStatus: order.urgentStatus || 'NORMAL',
-      orderItems: rawOrderItems,
-      samples: createdSamples,
-    };
-    }, {timeout: 30000});
+      { timeout: 30000 },
+    );
   }
 
   async update(id: string, data: any) {
-    const existing = await this.prisma.order.findUnique({where: {id}, include: {samples: {where: {OR: [{rejectionReason: null}, {rejectionReason: {not: 'Order items updated'}}]}}}});
+    const existing = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        samples: {
+          where: {
+            OR: [
+              { rejectionReason: null },
+              { rejectionReason: { not: 'Order items updated' } },
+            ],
+          },
+        },
+      },
+    });
     if (!existing) throw new NotFoundException('ไม่พบ Order');
-    if (existing.samples.some((sample) => sample.status !== 'REGISTERED')) throw new BadRequestException('แก้ไขได้เฉพาะ Order ที่ยังไม่ตรวจรับ');
+    if (existing.samples.some((sample) => sample.status !== 'REGISTERED'))
+      throw new BadRequestException('แก้ไขได้เฉพาะ Order ที่ยังไม่ตรวจรับ');
     const resolved = await this.catalog.resolve(data.orderItems);
-    const fields = ['hn','patientName','title','firstName','lastName','gender','dob','age','nationality','ethnicity','address','subdistrict','district','province','zipcode','telephone','patientType','entitlement','collectedDate','urgentStatus','testPanel','testProfile','testItem','idCard','orderItems'];
+    const fields = [
+      'hn',
+      'patientName',
+      'title',
+      'firstName',
+      'lastName',
+      'gender',
+      'dob',
+      'age',
+      'nationality',
+      'ethnicity',
+      'address',
+      'subdistrict',
+      'district',
+      'province',
+      'zipcode',
+      'telephone',
+      'patientType',
+      'entitlement',
+      'collectedDate',
+      'urgentStatus',
+      'testPanel',
+      'testProfile',
+      'testItem',
+      'idCard',
+      'orderItems',
+    ];
     const payload: any = {};
-    for (const field of fields) if (data[field] !== undefined) payload[field] = data[field];
-    if (data.passportNo !== undefined || data.passport !== undefined) payload.passportNo = data.passportNo ?? data.passport;
+    for (const field of fields)
+      if (data[field] !== undefined) payload[field] = data[field];
+    if (data.passportNo !== undefined || data.passport !== undefined)
+      payload.passportNo = data.passportNo ?? data.passport;
     if (data.siteCode) {
-      const client = await this.prisma.clientSite.findUnique({where: {siteCode: data.siteCode}});
+      const client = await this.prisma.clientSite.findUnique({
+        where: { siteCode: data.siteCode },
+      });
       if (!client) throw new BadRequestException('ไม่พบหน่วยงานส่งตรวจ');
-      payload.clientSiteId = client.id; payload.parentSiteId = client.parentSiteId;
+      payload.clientSiteId = client.id;
+      payload.parentSiteId = client.parentSiteId;
     }
     if (data.ward !== undefined) {
-      const ward = data.ward ? await this.prisma.ward.findFirst({where: {OR: [{wardCode: data.ward}, {wardName: data.ward}]}}) : null;
+      const ward = data.ward
+        ? await this.prisma.ward.findFirst({
+            where: { OR: [{ wardCode: data.ward }, { wardName: data.ward }] },
+          })
+        : null;
       payload.wardId = ward?.id || null;
     }
-    const changed = JSON.stringify(existing.orderItems) !== JSON.stringify(data.orderItems);
+    const changed =
+      JSON.stringify(existing.orderItems) !== JSON.stringify(data.orderItems);
     await this.prisma.$transaction(async (tx) => {
-      await tx.order.update({where: {id}, data: payload});
+      await tx.order.update({ where: { id }, data: payload });
       if (changed) {
         const ids = existing.samples.map((sample) => sample.id);
-        await tx.testResult.updateMany({where: {sampleId: {in: ids}}, data: {isVoided: true, voidReason: 'Order items updated', voidedAt: new Date()}});
-        await tx.sample.updateMany({where: {id: {in: ids}}, data: {status: 'REJECTED', rejectionReason: 'Order items updated'}});
+        await tx.testResult.updateMany({
+          where: { sampleId: { in: ids } },
+          data: {
+            isVoided: true,
+            voidReason: 'Order items updated',
+            voidedAt: new Date(),
+          },
+        });
+        await tx.sample.updateMany({
+          where: { id: { in: ids } },
+          data: { status: 'REJECTED', rejectionReason: 'Order items updated' },
+        });
         await this.catalog.createSamples(tx, id, resolved, data.urgentStatus);
-        await tx.auditLog.create({data: {action: 'UPDATE_ORDER_ITEMS', entityType: 'Order', entityId: id, oldValues: existing.orderItems ?? [], newValues: data.orderItems}});
+        await tx.auditLog.create({
+          data: {
+            action: 'UPDATE_ORDER_ITEMS',
+            entityType: 'Order',
+            entityId: id,
+            oldValues: existing.orderItems ?? [],
+            newValues: data.orderItems,
+          },
+        });
       }
     });
     await this.invalidateCache();
-    for (const key of ['dashboard_stats','samples_list_{}','workstation_queue']) await this.cacheManager.del(key);
+    for (const key of [
+      'dashboard_stats',
+      'samples_list_{}',
+      'workstation_queue',
+    ])
+      await this.cacheManager.del(key);
     const list = await this.findAll();
-    return list.find((order) => order.id === id);
+    const rows = Array.isArray(list) ? list : list.data;
+    return rows.find((order) => order.id === id);
   }
 
   async cancel(id: string) {

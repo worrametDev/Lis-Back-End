@@ -1,13 +1,16 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
 import * as compression from 'compression';
+import * as express from 'express';
+import { randomUUID } from 'crypto';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // 1. Enterprise Security Headers (Helmet)
@@ -21,6 +24,14 @@ async function bootstrap() {
   // 2. Performance & Cookies
   app.use(compression());
   app.use(cookieParser());
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+  app.use((req, res, next) => {
+    const requestId = req.header('x-request-id') || randomUUID();
+    res.setHeader('x-request-id', requestId);
+    (req as typeof req & { requestId?: string }).requestId = requestId;
+    next();
+  });
 
   // 3. Global Input Sanitization & Mass-assignment Protection
   app.useGlobalPipes(
@@ -43,9 +54,9 @@ async function bootstrap() {
 
       const isAllowed =
         allowedOrigins.includes(origin) ||
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1') ||
-        origin.endsWith('.vercel.app');
+        (process.env.NODE_ENV !== 'production' &&
+          (origin.startsWith('http://localhost:') ||
+            origin.startsWith('http://127.0.0.1:')));
 
       if (isAllowed) {
         return callback(null, true);
@@ -69,7 +80,7 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle('Healthdi Lab (LIS) — API Documentation & Test Center')
       .setDescription(
-        'ระบบสารสนเทศห้องปฏิบัติการ (LIS) — โรงพยาบาลเสนา (Sena Hospital) & เครือข่าย รพ.สต.\n\n' +
+        'ระบบสารสนเทศห้องปฏิบัติการ (LIS) — Installation Site & Client Network\n\n' +
           '🏢 พัฒนาโดย: MP GROUP (Thailand) CO.,LTD\n' +
           '📄 ออกแบบตาม: Healthdi LAB Design Version 1.0.0 (01-12-2026)\n\n' +
           '💡 **คำแนะนำการทดสอบ:**\n' +
@@ -139,11 +150,9 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
-  console.log(
+  logger.log(
     `🚀 Healthdi Lab Backend running on: http://localhost:${port}/api/v1`,
   );
-  console.log(
-    `📚 Swagger API Docs available at: http://localhost:${port}/docs`,
-  );
+  logger.log(`📚 Swagger API Docs available at: http://localhost:${port}/docs`);
 }
 bootstrap();

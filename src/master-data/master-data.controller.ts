@@ -97,7 +97,7 @@ export class MasterDataController {
         },
         siteName: {
           type: 'string',
-          example: 'โรงพยาบาลเสนา',
+          example: 'ชื่อโรงพยาบาลแม่ข่าย',
           description: 'ชื่อโรงพยาบาลแม่ข่าย (SITE NAME)',
         },
         siteType: { type: 'string', example: 'Parent Site' },

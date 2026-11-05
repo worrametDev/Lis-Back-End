@@ -18,6 +18,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
+import { CreateOrderDto, UpdateOrderDto } from './dto/order.dto';
 
 @ApiTags('Order Entry')
 @ApiBearerAuth('JWT-auth')
@@ -61,6 +62,8 @@ export class OrdersController {
     required: false,
     description: 'กรองถึงวันที่สร้าง (YYYY-MM-DD)',
   })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'คืนค่ารายการคำสั่งตรวจ' })
   findAll(
     @Query('search') search?: string,
@@ -69,6 +72,8 @@ export class OrdersController {
     @Query('hn') hn?: string,
     @Query('createdFrom') createdFrom?: string,
     @Query('createdTo') createdTo?: string,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
   ) {
     return this.ordersService.findAll({
       search,
@@ -77,6 +82,8 @@ export class OrdersController {
       hn,
       createdFrom,
       createdTo,
+      page,
+      pageSize,
     });
   }
 
@@ -123,7 +130,7 @@ export class OrdersController {
         },
         clientSiteName: {
           type: 'string',
-          example: 'โรงพยาบาลส่งเสริมสุขภาพตำบลทุ่งแสลงหลวง',
+          example: 'ชื่อหน่วยงานส่งตรวจ',
           description: 'หน่วยงานส่งตรวจ',
         },
         specimenType: {
@@ -145,14 +152,14 @@ export class OrdersController {
     status: 201,
     description: 'ลงทะเบียนสำเร็จ ออกรหัส Lab Number และบาร์โค้ดอัตโนมัติ',
   })
-  create(@Body() body: any) {
+  create(@Body() body: CreateOrderDto) {
     return this.ordersService.create(body);
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'แก้ไขข้อมูลคำสั่งตรวจ' })
   @ApiParam({ name: 'id', description: 'Order ID' })
-  update(@Param('id') id: string, @Body() body: any) {
+  update(@Param('id') id: string, @Body() body: UpdateOrderDto) {
     return this.ordersService.update(id, body);
   }
 

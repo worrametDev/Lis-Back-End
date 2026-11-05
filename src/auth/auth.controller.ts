@@ -58,7 +58,7 @@ export class AuthController {
         },
         password: {
           type: 'string',
-          example: 'Admin@1234',
+          example: 'รหัสผ่านของผู้ใช้งาน',
           description: 'รหัสผ่าน',
         },
       },

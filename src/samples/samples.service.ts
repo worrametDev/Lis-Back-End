@@ -19,9 +19,19 @@ export class SamplesService {
     createdTo?: string;
     receivedFrom?: string;
     receivedTo?: string;
+    page?: number;
+    pageSize?: number;
   }) {
     const cacheKey = `samples_list_${JSON.stringify(query || {})}`;
-    const cached = await this.cacheManager.get<any[]>(cacheKey);
+    const cached = await this.cacheManager.get<{
+      data: unknown[];
+      meta: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+      };
+    }>(cacheKey);
     if (cached) return cached;
 
     const where: any = {};
@@ -63,30 +73,36 @@ export class SamplesService {
       }
     }
 
-    const samples = await this.prisma.sample.findMany({
-      where,
-      include: {
-        order: {
-          include: {
-            clientSite: true,
-            parentSite: true,
-            shipment: true,
-            ward: true,
+    const page = Math.max(1, Number(query?.page) || 1);
+    const pageSize = Math.min(200, Math.max(1, Number(query?.pageSize) || 50));
+    const [samples, total] = await Promise.all([
+      this.prisma.sample.findMany({
+        where,
+        include: {
+          order: {
+            include: {
+              clientSite: true,
+              parentSite: true,
+              shipment: true,
+              ward: true,
+            },
+          },
+          sampleCondition: true,
+          testResults: {
+            take: 1,
+            select: {
+              department: { select: { departmentName: true } },
+              testPanel: true,
+              testName: true,
+            },
           },
         },
-        sampleCondition: true,
-        testResults: {
-          take: 1,
-          select: {
-            department: {select: {departmentName: true}},
-            testPanel: true,
-            testName: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.sample.count({ where }),
+    ]);
 
     const result = samples.map((s, idx) => ({
       id: s.id,
@@ -102,15 +118,21 @@ export class SamplesService {
         year: 'numeric',
       }),
       shipment: s.order.shipment?.shipmentNumber || '-',
-      clientSite:
-        s.order.clientSite?.siteName ||
-        '',
+      clientSite: s.order.clientSite?.siteName || '',
       hn: s.order.hn,
       labNo: s.labNumber,
       patientName: s.order.patientName,
       gender: s.order.gender || '',
       parentSite: s.order.parentSite?.siteName || '',
-      testCode: (Array.isArray(s.order.orderItems) ? s.order.orderItems.find((item: any) => item.testName === s.profileTestName) as any : null)?.testCode || s.testResults[0]?.testPanel || '',
+      testCode:
+        (Array.isArray(s.order.orderItems)
+          ? (s.order.orderItems.find(
+              (item: any) => item.testName === s.profileTestName,
+            ) as any)
+          : null
+        )?.testCode ||
+        s.testResults[0]?.testPanel ||
+        '',
       department: s.testResults[0]?.department?.departmentName || '',
       specimenType: s.specimenType,
       profileTestName:
@@ -121,8 +143,7 @@ export class SamplesService {
       // Prefer the concrete Test/Result name for barcode labels. A panel is
       // only a grouping and should not be printed as the tube's test label.
       testName: s.testResults?.[0]?.testName || '',
-      healthcareEntitlement:
-        s.order.entitlement || '',
+      healthcareEntitlement: s.order.entitlement || '',
       urgentStatus: s.urgentStatus || s.order.urgentStatus || 'NORMAL',
       ward: s.order.ward?.wardName || s.order.patientType || 'ผู้ป่วยนอก (OPD)',
       condition: s.sampleCondition?.conditionName || '',
@@ -132,8 +153,12 @@ export class SamplesService {
       rejectedAt: s.rejectedAt,
     }));
 
-    await this.cacheManager.set(cacheKey, result, 15000);
-    return result;
+    const response = {
+      data: result,
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
+    await this.cacheManager.set(cacheKey, response, 15000);
+    return response;
   }
 
   async invalidateCache() {

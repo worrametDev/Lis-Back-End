@@ -61,25 +61,6 @@ export class MiddlewareController {
     @Headers('x-api-key') apiKey?: string,
     @Body() payload?: CloudResultPayload,
   ) {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `\n================== [BACKEND INGESTION API: POST /middleware/results] ==================`,
-    );
-    console.log(`⏱️ Timestamp   : ${timestamp}`);
-    console.log(`🏥 Site Code   : ${siteCode || '00940'}`);
-    console.log(`🔑 Message ID  : ${payload?.messageId}`);
-    console.log(`🏷️ Specimen ID : ${payload?.specimenId}`);
-    console.log(
-      `🔬 Instrument  : ${payload?.instrument?.channel} (${payload?.instrument?.model})`,
-    );
-    console.log(`🧪 Results (${payload?.results?.length || 0} items):`);
-    console.log(JSON.stringify(payload?.results, null, 2));
-    console.log(`📦 Full Raw Payload:`);
-    console.log(JSON.stringify(payload, null, 2));
-    console.log(
-      `========================================================================================\n`,
-    );
-
     this.verifyAuth(apiKey);
     return this.middlewareService.receiveResults(
       siteCode || '00940',
@@ -97,11 +78,6 @@ export class MiddlewareController {
     @Headers('x-api-key') apiKey?: string,
     @Body() telemetry?: any,
   ) {
-    const timestamp = new Date().toISOString();
-    console.log(`\n💓 [BACKEND INGESTION API: POST /middleware/heartbeat]`);
-    console.log(`⏱️ Timestamp : ${timestamp} | Site: ${siteCode || '00940'}`);
-    console.log(`📊 Telemetry : ${JSON.stringify(telemetry)}`);
-
     this.verifyAuth(apiKey);
     return this.middlewareService.recordHeartbeat(
       siteCode || '00940',

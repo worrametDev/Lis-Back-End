@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Req, Query } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -6,31 +6,53 @@ import {
   ApiBody,
   ApiParam,
   ApiBearerAuth,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { WorkstationWorkflowService } from './workstation-workflow.service';
 import { WorkstationService } from './workstation.service';
+import { UpdateResultsDto } from './dto/update-results.dto';
+import {
+  ApproveDto,
+  ChangeResultsDto,
+  ReportDto,
+  SampleResultsDto,
+  VoidResultDto,
+} from './dto/workflow.dto';
 
 @ApiTags('Workstation')
 @ApiBearerAuth('JWT-auth')
 @Controller('workstation')
 export class WorkstationController {
-  constructor(private readonly workstationService: WorkstationService, private readonly workflow: WorkstationWorkflowService) {}
+  constructor(
+    private readonly workstationService: WorkstationService,
+    private readonly workflow: WorkstationWorkflowService,
+  ) {}
 
   @Get('history/:sampleId')
-  history(@Param('sampleId') sampleId: string) { return this.workflow.history(sampleId); }
+  history(@Param('sampleId') sampleId: string) {
+    return this.workflow.history(sampleId);
+  }
 
   @Post('transfer-repeat')
-  transferRepeat(@Body() body: {sampleId: string; resultIds: string[]}, @Req() req: any) {
-    return this.workflow.transferRepeat(body.sampleId, body.resultIds, req.user.sub);
+  transferRepeat(@Body() body: SampleResultsDto, @Req() req: any) {
+    return this.workflow.transferRepeat(
+      body.sampleId,
+      body.resultIds,
+      req.user.sub,
+    );
   }
 
   @Post('report')
-  report(@Body() body: {sampleId: string; items: {id: string; testResult: string}[]}, @Req() req: any) {
+  report(
+    @Body()
+    body: ReportDto,
+    @Req() req: any,
+  ) {
     return this.workflow.report(body.sampleId, body.items, req.user.sub);
   }
 
   @Post('repeat')
-  repeat(@Body() body: {sampleId: string; resultIds: string[]}, @Req() req: any) {
+  repeat(@Body() body: SampleResultsDto, @Req() req: any) {
     return this.workflow.repeat(body.sampleId, body.resultIds, req.user.sub);
   }
 
@@ -39,8 +61,10 @@ export class WorkstationController {
     summary: 'ดึงคิวผู้ป่วยที่รอการตรวจผลแล็บ (Patient Queue Table ด้านบน)',
   })
   @ApiResponse({ status: 200, description: 'คืนค่าคิวผู้ป่วยในห้องแล็บ' })
-  getQueue() {
-    return this.workstationService.getQueue();
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  getQueue(@Query('page') page?: number, @Query('pageSize') pageSize?: number) {
+    return this.workstationService.getQueue({ page, pageSize });
   }
 
   @Get('results/:sampleId')
@@ -100,7 +124,7 @@ export class WorkstationController {
     },
   })
   @ApiResponse({ status: 200, description: 'บันทึกผลสำเร็จ' })
-  updateResults(@Body() body: { items: any[] }) {
+  updateResults(@Body() body: UpdateResultsDto) {
     return this.workstationService.updateResults(body.items || []);
   }
 
@@ -132,11 +156,7 @@ export class WorkstationController {
   @ApiResponse({ status: 200, description: 'อนุมัติผลสำเร็จ' })
   approve(
     @Body()
-    body: {
-      sampleId?: string;
-      resultIds?: string[];
-      approvedById?: string;
-    },
+    body: ApproveDto,
     @Req() req: any,
   ) {
     return this.workflow.approve(body.sampleId, body.resultIds, req.user.sub);
@@ -161,7 +181,7 @@ export class WorkstationController {
     },
   })
   @ApiResponse({ status: 200, description: 'ยกเลิกผลสำเร็จ' })
-  voidResult(@Body() body: { id: string; reason: string }) {
+  voidResult(@Body() body: VoidResultDto) {
     return this.workstationService.voidResult(body.id, body.reason);
   }
 
@@ -188,15 +208,14 @@ export class WorkstationController {
   @ApiResponse({ status: 200, description: 'ลบผลตรวจสำเร็จ' })
   deleteResults(
     @Body()
-    body: {
-      resultIds: string[];
-      reason: string;
-      userAccount?: string;
-      sampleId?: string;
-    },
+    body: ChangeResultsDto,
     @Req() req: any,
   ) {
-    return this.workflow.changeResults({...body, sampleId: body.sampleId!}, req.user.sub, true);
+    return this.workflow.changeResults(
+      { ...body, sampleId: body.sampleId! },
+      req.user.sub,
+      true,
+    );
   }
 
   @Post('re-status')
@@ -223,15 +242,12 @@ export class WorkstationController {
   @ApiResponse({ status: 200, description: 'ปรับสถานะสำเร็จ' })
   reStatus(
     @Body()
-    body: {
-      resultIds: string[];
-      reason: string;
-      targetStatus?: string;
-      userAccount?: string;
-      sampleId?: string;
-    },
+    body: ChangeResultsDto,
     @Req() req: any,
   ) {
-    return this.workflow.changeResults({...body, sampleId: body.sampleId!}, req.user.sub);
+    return this.workflow.changeResults(
+      { ...body, sampleId: body.sampleId! },
+      req.user.sub,
+    );
   }
 }

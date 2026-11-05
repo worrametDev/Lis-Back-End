@@ -8,6 +8,7 @@ import {
   Param,
   Res,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -29,6 +30,7 @@ import type { Response } from 'express';
 @ApiBearerAuth('JWT-auth')
 @Controller('uploads')
 export class UploadsController {
+  private readonly logger = new Logger(UploadsController.name);
   @Get(':filename')
   async getLocalFile(
     @Param('filename') filename: string,
@@ -209,7 +211,7 @@ export class UploadsController {
       }
       fs.writeFileSync(path.join(uploadDir, filename), storedBuffer);
     } catch (err) {
-      console.warn(
+      this.logger.warn(
         'Warning: Cannot write to local filesystem (Running on serverless without Supabase Storage):',
         err,
       );

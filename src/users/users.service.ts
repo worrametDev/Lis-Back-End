@@ -46,7 +46,9 @@ export class UsersService {
     return UserStatus.ACTIVE;
   }
 
-  async findAll(search?: string, role?: string, status?: string) {
+  async findAll(search?: string, role?: string, status?: string, page = 1, pageSize = 50) {
+    page = Math.max(1, Number(page) || 1);
+    pageSize = Math.min(200, Math.max(1, Number(pageSize) || 50));
     const where: any = {};
     if (role) {
       where.userRole = this.mapRole(role);
@@ -63,16 +65,21 @@ export class UsersService {
       ];
     }
 
-    const users = await this.prisma.user.findMany({
-      where,
-      include: {
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        include: {
         parentSite: true,
         clientSite: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
 
-    return users.map((u) => ({
+    const data = users.map((u) => ({
       id: u.id,
       status: u.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
       userStatus: u.userStatus === UserStatus.ACTIVE ? 'Active' : 'Inactive',
@@ -90,7 +97,7 @@ export class UsersService {
       clientSiteId: u.clientSiteId || '',
       clientSiteCode: u.clientSite?.siteCode || '',
       clientSiteName: u.clientSite?.siteName || '',
-      parentSite: u.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSite: u.parentSite?.siteName || '',
       parentSiteId: u.parentSiteId || '',
       province: u.province || '',
       healthRegion: u.healthRegion || '',
@@ -101,6 +108,7 @@ export class UsersService {
       telemedicineRole: u.telemedicineRole || '',
       createdAt: u.createdAt,
     }));
+    return { data, meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };
   }
 
   async getOptions() {
@@ -178,7 +186,7 @@ export class UsersService {
       clientSiteId: user.clientSiteId || '',
       clientSiteCode: user.clientSite?.siteCode || '',
       clientSiteName: user.clientSite?.siteName || '',
-      parentSite: user.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSite: user.parentSite?.siteName || '',
       license: user.licenseNo || '',
       telemedicineAccess: user.telemedicineAccess ?? false,
       telemedicineRole: user.telemedicineRole || '',
@@ -214,6 +222,9 @@ export class UsersService {
     if (!data.username || !data.firstName) {
       throw new BadRequestException('กรุณาระบุ Username และ First Name');
     }
+    if (!data.password || String(data.password).length < 8) {
+      throw new BadRequestException('กรุณาระบุ Password อย่างน้อย 8 ตัวอักษร');
+    }
 
     const existing = await this.prisma.user.findUnique({
       where: { username: data.username },
@@ -224,7 +235,7 @@ export class UsersService {
       );
     }
 
-    const passwordHash = bcrypt.hashSync(data.password || 'Admin@1234', 10);
+    const passwordHash = bcrypt.hashSync(String(data.password), 10);
     const userRole = this.mapRole(data.role || data.userRole);
     const userStatus = this.mapStatus(data.userStatus || data.status);
 
@@ -321,7 +332,7 @@ export class UsersService {
       clientSiteId: newUser.clientSiteId || '',
       clientSiteCode: newUser.clientSite?.siteCode || '',
       clientSiteName: newUser.clientSite?.siteName || '',
-      parentSite: newUser.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSite: newUser.parentSite?.siteName || '',
       parentSiteId: newUser.parentSiteId || '',
       province: newUser.province || '',
       healthRegion: newUser.healthRegion || '',
@@ -452,7 +463,7 @@ export class UsersService {
       clientSiteId: updated.clientSiteId || '',
       clientSiteCode: updated.clientSite?.siteCode || '',
       clientSiteName: updated.clientSite?.siteName || '',
-      parentSite: updated.parentSite?.siteName || 'โรงพยาบาลเสนา',
+      parentSite: updated.parentSite?.siteName || '',
       parentSiteId: updated.parentSiteId || '',
       province: updated.province || '',
       healthRegion: updated.healthRegion || '',

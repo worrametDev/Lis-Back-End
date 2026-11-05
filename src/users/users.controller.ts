@@ -43,13 +43,17 @@ export class UsersController {
     required: false,
     description: 'กรองตามสถานะ (Active, Inactive)',
   })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'คืนค่ารายการผู้ใช้งาน' })
   async findAll(
     @Query('search') search?: string,
     @Query('role') role?: string,
     @Query('status') status?: string,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
   ) {
-    return this.usersService.findAll(search, role, status);
+    return this.usersService.findAll(search, role, status, page, pageSize);
   }
 
   @Get('options')
@@ -113,7 +117,7 @@ export class UsersController {
         },
         password: {
           type: 'string',
-          example: 'Admin@1234',
+          example: 'รหัสผ่านของผู้ใช้งาน',
           description: 'รหัสผ่าน',
         },
         role: {
@@ -128,7 +132,7 @@ export class UsersController {
         },
         siteName: {
           type: 'string',
-          example: 'โรงพยาบาลเสนา',
+          example: 'ชื่อโรงพยาบาลแม่ข่าย',
           description: 'สังกัดโรงพยาบาล/รพ.สต.',
         },
       },
