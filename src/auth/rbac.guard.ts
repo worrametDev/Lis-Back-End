@@ -55,6 +55,30 @@ export class RbacGuard implements CanActivate {
     if (path.startsWith('/workstation') && role === 'CLIENT_SITE_USER') {
       throw new ForbiddenException('Client User ไม่มีสิทธิ์แก้ไขผลตรวจ');
     }
+    const workstationRestricted = [
+      '/workstation/report',
+      '/workstation/approve',
+      '/workstation/repeat',
+      '/workstation/delete-results',
+      '/workstation/re-status',
+      '/workstation/transfer-repeat',
+    ];
+    if (
+      workstationRestricted.some((route) => path.startsWith(route)) &&
+      (role === 'CLIENT_SITE_USER' || role === 'LAB_ADMINISTRATOR')
+    ) {
+      throw new ForbiddenException('ไม่มีสิทธิ์ดำเนินการกับผลตรวจรายการนี้');
+    }
+    if (
+      path.startsWith('/samples/receive') ||
+      path.startsWith('/samples/reject')
+    ) {
+      if (role === 'CLIENT_SITE_USER') {
+        throw new ForbiddenException(
+          'Client User ไม่มีสิทธิ์ตรวจรับหรือปฏิเสธสิ่งส่งตรวจ',
+        );
+      }
+    }
     if (path.startsWith('/uploads') && role === 'CLIENT_SITE_USER') {
       throw new ForbiddenException('ไม่มีสิทธิ์อัปโหลดไฟล์');
     }
