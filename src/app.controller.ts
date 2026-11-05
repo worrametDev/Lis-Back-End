@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { AppService } from './app.service';
 import { Public } from './auth/public.decorator';
 import { PrismaService } from './prisma/prisma.service';
@@ -28,11 +28,11 @@ export class AppController {
         latencyMs: Date.now() - startedAt,
       };
     } catch {
-      return {
+      throw new ServiceUnavailableException({
         status: 'degraded',
         database: 'down',
         latencyMs: Date.now() - startedAt,
-      };
+      });
     }
   }
 }
