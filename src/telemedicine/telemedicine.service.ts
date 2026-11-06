@@ -384,7 +384,8 @@ export class TelemedicineService {
       date: row.completedAt.toLocaleDateString('th-TH'),
       doctor: `${row.doctor.firstName} ${row.doctor.lastName}`.trim(),
       outcome: row.outcome || '-',
-      status: 'เสร็จสิ้น',
+      status: row.queue?.status === 'COMPLETED' ? 'เสร็จสิ้น' : 'กำลังปรึกษา',
+      noteStatus: details.noteStatus || (row.queue?.status === 'COMPLETED' ? 'closed' : 'draft'),
       roomName: row.queue.roomName || undefined,
       clientSite: row.queue.clientSite.siteName,
       parentSite: row.queue.parentSite.siteName,
@@ -437,6 +438,12 @@ export class TelemedicineService {
     const followUp = dto.followUp || dto.soap?.followUp || null;
     const followUpDate = dto.followUpDate || dto.soap?.followUpDate || null;
 
+    const noteStatus =
+      dto.noteStatus ||
+      (dto.status === 'เสร็จสิ้น' || dto.status === 'COMPLETED'
+        ? 'closed'
+        : 'note');
+
     const clinicalDetails = {
       chiefComplaint: dto.soap?.chiefComplaint || '',
       hpi: dto.soap?.hpi || '',
@@ -447,6 +454,7 @@ export class TelemedicineService {
       followUpDate,
       referral,
       referralSiteName,
+      noteStatus,
     };
 
     const result = await this.prisma.$transaction(async (tx) => {

@@ -43,6 +43,7 @@ export class CreateConsultationDto {
   @IsOptional() @IsString() queueId?: string;
   @IsOptional() @IsString() hn?: string;
   @IsOptional() @IsString() status?: string;
+  @IsOptional() @IsString() noteStatus?: string;
   @IsOptional() @IsString() outcome?: string;
   @IsOptional() @IsString() referral?: string;
   @IsOptional() @IsString() referralSiteName?: string;
