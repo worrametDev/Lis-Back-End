@@ -253,11 +253,41 @@ export class TelemedicineService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    if (!order) throw new NotFoundException('ไม่พบข้อมูลผู้ป่วยใน LIS');
     const queue = await this.prisma.telemedicineQueue.findFirst({
       where: { hn },
+      include: { clientSite: true, parentSite: true },
       orderBy: { createdAt: 'desc' },
     });
+    if (!order && !queue) {
+      throw new NotFoundException('ไม่พบข้อมูลผู้ป่วยใน LIS หรือ Telemedicine');
+    }
+    if (!order && queue) {
+      const vitals = (queue.triageData || {}) as Record<string, any>;
+      return {
+        hn: queue.hn,
+        patientName: queue.patientName,
+        ageGender: queue.ageGender || '-',
+        phone: queue.phone || '-',
+        idCard: undefined,
+        entitlement: '-',
+        queueNo: queue.queueNumber,
+        siteName: queue.clientSite?.siteName || '-',
+        clientSite: queue.clientSite?.siteName || '-',
+        clientSiteId: queue.clientSiteId,
+        parentSite: queue.parentSite?.siteName || '-',
+        parentSiteId: queue.parentSiteId,
+        chiefComplaint: queue.chiefComplaint || '-',
+        vitals: {
+          bp: vitals.bp || '-',
+          hr: Number(vitals.hr || 0),
+          temp: Number(vitals.temp || 0),
+          rr: Number(vitals.rr || 0),
+          spo2: Number(vitals.spo2 || 0),
+          recordedAt: vitals.recordedAt || queue.updatedAt.toISOString(),
+        },
+        labResults: [],
+      };
+    }
     const vitals = (queue?.triageData || {}) as Record<string, any>;
     return {
       hn: order.hn,
