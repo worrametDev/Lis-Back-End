@@ -1424,7 +1424,10 @@ export class MasterDataService {
       'user_options',
     ];
 
-    const entries: Record<string, any> = {};
+    const entries: Record<
+      string,
+      { isCached: boolean; itemCount: number; sample: unknown }
+    > = {};
     for (const key of keys) {
       const data = await this.cacheManager.get<unknown>(key);
       const isCached = data !== undefined && data !== null;

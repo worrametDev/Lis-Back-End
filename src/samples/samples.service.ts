@@ -110,6 +110,8 @@ export class SamplesService {
           },
           sampleCondition: true,
           testResults: {
+            // The receiving table displays one representative test only;
+            // full test results are loaded by the detail/workstation endpoint.
             take: 1,
             select: {
               department: { select: { departmentName: true } },
