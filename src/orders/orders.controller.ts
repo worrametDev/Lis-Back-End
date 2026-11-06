@@ -18,6 +18,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
+import { PaginationQueryDto } from '../common/pagination.dto';
 import { CreateOrderDto, UpdateOrderDto } from './dto/order.dto';
 
 @ApiTags('Order Entry')
@@ -72,8 +73,7 @@ export class OrdersController {
     @Query('hn') hn?: string,
     @Query('createdFrom') createdFrom?: string,
     @Query('createdTo') createdTo?: string,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
+    @Query() pagination?: PaginationQueryDto,
   ) {
     return this.ordersService.findAll({
       search,
@@ -82,8 +82,8 @@ export class OrdersController {
       hn,
       createdFrom,
       createdTo,
-      page,
-      pageSize,
+      page: pagination?.page,
+      pageSize: pagination?.pageSize,
     });
   }
 

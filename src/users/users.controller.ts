@@ -18,6 +18,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { UserQueryDto } from './dto/user-query.dto';
 import { CreateUserDto, UpdateUserDto } from './dto/user.dto';
 
 @ApiTags('Users')
@@ -47,14 +48,14 @@ export class UsersController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'pageSize', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'คืนค่ารายการผู้ใช้งาน' })
-  async findAll(
-    @Query('search') search?: string,
-    @Query('role') role?: string,
-    @Query('status') status?: string,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
-  ) {
-    return this.usersService.findAll(search, role, status, page, pageSize);
+  async findAll(@Query() query?: UserQueryDto) {
+    return this.usersService.findAll(
+      query?.search,
+      query?.role,
+      query?.status,
+      query?.page,
+      query?.pageSize,
+    );
   }
 
   @Get('options')

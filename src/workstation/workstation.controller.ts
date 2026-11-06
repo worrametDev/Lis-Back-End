@@ -19,6 +19,7 @@ import {
   SampleResultsDto,
   VoidResultDto,
 } from './dto/workflow.dto';
+import { PaginationQueryDto } from '../common/pagination.dto';
 
 @ApiTags('Workstation')
 @ApiBearerAuth('JWT-auth')
@@ -32,13 +33,12 @@ export class WorkstationController {
   @Get('history/:sampleId')
   history(
     @Param('sampleId') sampleId: string,
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string,
+    @Query() pagination?: PaginationQueryDto,
   ) {
     return this.workflow.history(
       sampleId,
-      page ? Number(page) : undefined,
-      pageSize ? Number(pageSize) : undefined,
+      pagination?.page,
+      pagination?.pageSize,
     );
   }
 
@@ -75,8 +75,8 @@ export class WorkstationController {
   @ApiResponse({ status: 200, description: 'คืนค่าคิวผู้ป่วยในห้องแล็บ' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'pageSize', required: false, type: Number })
-  getQueue(@Query('page') page?: number, @Query('pageSize') pageSize?: number) {
-    return this.workstationService.getQueue({ page, pageSize });
+  getQueue(@Query() pagination?: PaginationQueryDto) {
+    return this.workstationService.getQueue(pagination);
   }
 
   @Get('results/:sampleId')

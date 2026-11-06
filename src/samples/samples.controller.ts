@@ -8,6 +8,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { SamplesService } from './samples.service';
+import { PaginationQueryDto } from '../common/pagination.dto';
 
 @ApiTags('Sample Receiving')
 @ApiBearerAuth('JWT-auth')
@@ -65,8 +66,7 @@ export class SamplesController {
     @Query('createdTo') createdTo?: string,
     @Query('receivedFrom') receivedFrom?: string,
     @Query('receivedTo') receivedTo?: string,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
+    @Query() pagination?: PaginationQueryDto,
   ) {
     return this.samplesService.findAll({
       status,
@@ -76,8 +76,8 @@ export class SamplesController {
       createdTo,
       receivedFrom,
       receivedTo,
-      page,
-      pageSize,
+      page: pagination?.page,
+      pageSize: pagination?.pageSize,
     });
   }
 
