@@ -402,7 +402,13 @@ export class TelemedicineService {
         hpi: details.hpi || undefined,
         pe: details.pe || row.objective || undefined,
         assessment: details.assessment || row.assessment || undefined,
-        planAdvice: details.planAdvice || row.plan || undefined,
+        planAdvice:
+          details.planAdvice !== undefined && details.planAdvice !== null
+            ? details.planAdvice
+            : (row.plan || "")
+                .replace(/\s*•\s*Follow-up:.*$/i, "")
+                .replace(/\s*•\s*Referral:.*$/i, "")
+                .trim(),
       },
       vitals: row.vitalSigns,
     };
