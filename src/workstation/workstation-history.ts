@@ -5,31 +5,44 @@ import { PrismaService } from '../prisma/prisma.service';
 export async function loadPatientHistory(
   prisma: PrismaService,
   sampleId: string,
+  page = 1,
+  pageSize = 20,
 ) {
   const current = await prisma.sample.findUnique({
     where: { id: sampleId },
     include: { order: true },
   });
   if (!current) throw new NotFoundException('ไม่พบสิ่งส่งตรวจ');
-  const samples = await prisma.sample.findMany({
-    where: {
-      order: {
-        hn: current.order.hn,
-        clientSiteId: current.order.clientSiteId,
-      },
-      status: { in: [SpecimenStatus.VERIFIED, SpecimenStatus.APPROVED] },
+  const safePage = Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
+  const safePageSize = Number.isFinite(pageSize)
+    ? Math.min(100, Math.max(1, Math.floor(pageSize)))
+    : 20;
+  const where = {
+    order: {
+      hn: current.order.hn,
+      clientSiteId: current.order.clientSiteId,
     },
-    include: {
-      order: { include: { ward: true } },
-      testResults: {
-        where: { isVoided: false, testResult: { not: null } },
-        include: { department: true, approvedBy: true },
+    status: { in: [SpecimenStatus.VERIFIED, SpecimenStatus.APPROVED] },
+  };
+  const [samples, total] = await Promise.all([
+    prisma.sample.findMany({
+      where: {
+        ...where,
       },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-  });
-  return samples
+      include: {
+        order: { include: { ward: true } },
+        testResults: {
+          where: { isVoided: false, testResult: { not: null } },
+          include: { department: true, approvedBy: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (safePage - 1) * safePageSize,
+      take: safePageSize,
+    }),
+    prisma.sample.count({ where }),
+  ]);
+  const data = samples
     .filter((s) => s.testResults.length > 0)
     .map((s) => {
       const approved = s.testResults.find((r) => r.approvedBy);
@@ -62,4 +75,13 @@ export async function loadPatientHistory(
         })),
       };
     });
+  return {
+    data,
+    meta: {
+      page: safePage,
+      pageSize: safePageSize,
+      total,
+      totalPages: Math.ceil(total / safePageSize),
+    },
+  };
 }

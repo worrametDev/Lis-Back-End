@@ -30,8 +30,16 @@ export class WorkstationController {
   ) {}
 
   @Get('history/:sampleId')
-  history(@Param('sampleId') sampleId: string) {
-    return this.workflow.history(sampleId);
+  history(
+    @Param('sampleId') sampleId: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.workflow.history(
+      sampleId,
+      page ? Number(page) : undefined,
+      pageSize ? Number(pageSize) : undefined,
+    );
   }
 
   @Post('transfer-repeat')

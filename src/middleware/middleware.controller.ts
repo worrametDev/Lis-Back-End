@@ -49,9 +49,16 @@ export class MiddlewareController {
     @Headers('x-site-code') siteCode: string,
     @Headers('x-api-key') apiKey?: string,
     @Query('since') since?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
     this.verifyAuth(apiKey);
-    return this.middlewareService.getOrders(siteCode || '00940', since);
+    return this.middlewareService.getOrders(
+      siteCode || '00940',
+      since,
+      page ? Number(page) : undefined,
+      pageSize ? Number(pageSize) : undefined,
+    );
   }
 
   @Public()

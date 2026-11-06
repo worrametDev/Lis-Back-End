@@ -16,8 +16,8 @@ export class WorkstationWorkflowService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
-  history(sampleId: string) {
-    return loadPatientHistory(this.prisma, sampleId);
+  history(sampleId: string, page?: number, pageSize?: number) {
+    return loadPatientHistory(this.prisma, sampleId, page, pageSize);
   }
 
   async report(

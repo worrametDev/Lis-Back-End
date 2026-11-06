@@ -2,11 +2,59 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { Prisma, SpecimenStatus } from '@prisma/client';
 import { nextLabNumber } from './lab-number';
 import { PrismaService } from '../prisma/prisma.service';
+import { OrderItemDto } from './dto/order.dto';
+
+interface CatalogTestItem {
+  code: string;
+  name?: string;
+  unit?: string;
+  low?: string | number | null;
+  high?: string | number | null;
+}
+
+interface ResolvedOrderItem extends OrderItemDto {
+  departmentId: string;
+  subtests: CatalogTestItem[];
+}
+
+function isCatalogTestItem(
+  value: Prisma.JsonValue,
+): value is Prisma.JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function toCatalogTestItems(value: Prisma.JsonValue): CatalogTestItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isCatalogTestItem(entry) || typeof entry.code !== 'string') return [];
+    return [
+      {
+        code: entry.code,
+        name: typeof entry.name === 'string' ? entry.name : undefined,
+        unit: typeof entry.unit === 'string' ? entry.unit : undefined,
+        low:
+          typeof entry.low === 'string' || typeof entry.low === 'number'
+            ? entry.low
+            : null,
+        high:
+          typeof entry.high === 'string' || typeof entry.high === 'number'
+            ? entry.high
+            : null,
+      },
+    ];
+  });
+}
+
+function toStringList(value: Prisma.JsonValue): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+}
 
 @Injectable()
 export class OrderCatalogService {
   constructor(private readonly prisma: PrismaService) {}
-  async resolve(items: any[]) {
+  async resolve(items: OrderItemDto[]): Promise<ResolvedOrderItem[]> {
     if (!items?.length)
       throw new BadRequestException('กรุณาเลือกรายการตรวจจาก master data');
     const [tests, panels, profiles, departments] = await Promise.all([
@@ -19,7 +67,7 @@ export class OrderCatalogService {
       code: string,
       kind?: string,
       seen = new Set<string>(),
-    ): any[] => {
+    ): CatalogTestItem[] => {
       const key = (kind || '') + ':' + code;
       if (seen.has(key))
         throw new BadRequestException('master data อ้างอิงวนซ้ำ: ' + code);
@@ -28,25 +76,27 @@ export class OrderCatalogService {
         kind !== 'panel' && kind !== 'profile'
           ? tests.find((t) => t.code === code)
           : undefined;
-      if (test)
-        return Array.isArray(test.testItems) && test.testItems.length
-          ? test.testItems
+      if (test) {
+        const testItems = toCatalogTestItems(test.testItems);
+        return testItems.length
+          ? testItems
           : [{ code: test.code, name: test.name }];
+      }
       const profile =
         kind !== 'panel' ? profiles.find((p) => p.code === code) : undefined;
       if (profile)
-        return (Array.isArray(profile.tests) ? profile.tests : []).flatMap(
-          (c) => expand(String(c), 'test', next),
+        return toStringList(profile.tests).flatMap((c) =>
+          expand(c, 'test', next),
         );
       const panel = panels.find((p) => p.panelCode === code);
       if (panel)
-        return (Array.isArray(panel.testItems) ? panel.testItems : []).flatMap(
-          (c) => expand(String(c), 'test', next),
+        return toStringList(panel.testItems).flatMap((c) =>
+          expand(c, 'test', next),
         );
       for (const t of tests) {
-        const sub = Array.isArray(t.testItems)
-          ? t.testItems.find((item: any) => item.code === code)
-          : undefined;
+        const sub = toCatalogTestItems(t.testItems).find(
+          (item) => item.code === code,
+        );
         if (sub) return [sub];
       }
       throw new BadRequestException('ไม่พบรายการตรวจที่เปิดใช้งาน: ' + code);
@@ -78,7 +128,7 @@ export class OrderCatalogService {
   async createSamples(
     tx: Prisma.TransactionClient,
     orderId: string,
-    items: any[],
+    items: ResolvedOrderItem[],
     urgentStatus = 'NORMAL',
   ) {
     const order = await tx.order.findUniqueOrThrow({

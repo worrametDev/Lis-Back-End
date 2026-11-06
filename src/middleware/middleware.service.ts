@@ -47,7 +47,7 @@ export class MiddlewareService {
   /**
    * Get orders to sync down to Local Middleware
    */
-  async getOrders(siteCode: string, since?: string) {
+  async getOrders(siteCode: string, since?: string, page = 1, pageSize = 50) {
     const parentSite = await this.prisma.parentSite.findFirst({
       where: { siteCode: siteCode || '00940' },
     });
@@ -73,14 +73,22 @@ export class MiddlewareService {
       whereClause.parentSiteId = parentSite.id;
     }
 
-    const orders = await this.prisma.order.findMany({
-      where: whereClause,
-      include: {
-        samples: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
+    const safePage = Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
+    const safePageSize = Number.isFinite(pageSize)
+      ? Math.min(100, Math.max(1, Math.floor(pageSize)))
+      : 50;
+    const [orders, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where: whereClause,
+        include: {
+          samples: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (safePage - 1) * safePageSize,
+        take: safePageSize,
+      }),
+      this.prisma.order.count({ where: whereClause }),
+    ]);
 
     const formattedOrders = orders.flatMap((o) => {
       return (o.samples || []).map((s, idx) => {
@@ -128,6 +136,12 @@ export class MiddlewareService {
     return {
       cursor: new Date().toISOString(),
       orders: formattedOrders,
+      meta: {
+        page: safePage,
+        pageSize: safePageSize,
+        total,
+        totalPages: Math.ceil(total / safePageSize),
+      },
     };
   }
 

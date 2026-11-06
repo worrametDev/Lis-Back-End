@@ -21,6 +21,7 @@ import { AuditService } from './audit/audit.service';
 import { AuditInterceptor } from './audit/audit.interceptor';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { PaginationInterceptor } from './common/pagination.interceptor';
+import { MonitoringModule } from './monitoring/monitoring.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { PaginationInterceptor } from './common/pagination.interceptor';
     DashboardModule,
     UploadsModule,
     MiddlewareModule,
+    MonitoringModule,
   ],
   controllers: [AppController],
   providers: [
