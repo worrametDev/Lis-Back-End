@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtAuthService } from './jwt.service';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
@@ -48,17 +52,8 @@ export class AuthService {
     return result;
   }
 
-  private async getDefaultParentSiteName(): Promise<string> {
-    const primarySite = await this.prisma.parentSite.findFirst({
-      where: { siteStatus: 'Active' },
-      orderBy: { createdAt: 'asc' },
-    });
-    return primarySite?.siteName || process.env.HOSPITAL_NAME || '';
-  }
-
   async login(username: string, pass: string) {
     const user = await this.validateUser(username, pass);
-    const defaultParent = await this.getDefaultParentSiteName();
     const payload = {
       sub: user.id,
       username: user.username,
@@ -80,7 +75,7 @@ export class AuthService {
         email: user.email,
         role: user.userRole,
         status: user.userStatus,
-        parentSite: user.parentSite?.siteName || defaultParent,
+        parentSite: user.parentSite?.siteName || '',
         parentSiteId: user.parentSiteId || '',
         clientSite: user.clientSite?.siteName || '',
         clientSiteId: user.clientSiteId || '',
@@ -88,10 +83,22 @@ export class AuthService {
         province: user.province || '',
         healthRegion: user.healthRegion || '',
         signatureUrl: user.signatureUrl || '',
+        position: user.position || '',
+        organization: user.organization || '',
         telemedicineAccess: user.telemedicineAccess ?? false,
         telemedicineRole: user.telemedicineRole || '',
       },
     };
+  }
+
+  async loginTelemedicine(username: string, pass: string) {
+    const user = await this.validateUser(username, pass);
+    if (!user.telemedicineAccess) {
+      throw new ForbiddenException(
+        'บัญชีนี้ยังไม่ได้รับสิทธิ์เข้าใช้งานระบบ Telemedicine',
+      );
+    }
+    return this.login(username, pass);
   }
 
   private hashRefreshToken(token: string) {
@@ -156,14 +163,13 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('ไม่พบข้อมูลผู้ใช้งาน');
     }
-    const defaultParent = await this.getDefaultParentSiteName();
     const { passwordHash: _passwordHash, ...result } = user;
     return {
       ...result,
       fullname: `${user.firstName} ${user.lastName}`.trim(),
       role: user.userRole,
       status: user.userStatus,
-      parentSite: user.parentSite?.siteName || defaultParent,
+      parentSite: user.parentSite?.siteName || '',
       parentSiteId: user.parentSiteId || '',
       clientSite: user.clientSite?.siteName || '',
       clientSiteId: user.clientSiteId || '',

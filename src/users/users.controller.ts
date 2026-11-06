@@ -19,7 +19,11 @@ import {
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UserQueryDto } from './dto/user-query.dto';
-import { CreateUserDto, UpdateUserDto } from './dto/user.dto';
+import {
+  CreateUserDto,
+  UpdateTelemedicineAccessDto,
+  UpdateUserDto,
+} from './dto/user.dto';
 
 @ApiTags('Users')
 @ApiBearerAuth('JWT-auth')
@@ -161,7 +165,7 @@ export class UsersController {
   @ApiParam({ name: 'id', description: 'User ID' })
   async updateTelemedicineAccess(
     @Param('id') id: string,
-    @Body() body: { telemedicineAccess: boolean; telemedicineRole?: string },
+    @Body() body: UpdateTelemedicineAccessDto,
   ) {
     return this.usersService.updateTelemedicineAccess(
       id,

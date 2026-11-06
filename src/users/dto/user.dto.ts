@@ -2,6 +2,7 @@ import { PartialType } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   MinLength,
@@ -35,3 +36,10 @@ export class CreateUserDto {
 }
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {}
+
+export class UpdateTelemedicineAccessDto {
+  @IsBoolean() telemedicineAccess!: boolean;
+  @IsOptional()
+  @IsIn(['DOCTOR', 'NURSE', 'STAFF', 'ADMIN'])
+  telemedicineRole?: string;
+}

@@ -109,6 +109,21 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('telemedicine/login')
+  @ApiOperation({
+    summary: 'เข้าสู่ Telemedicine ด้วยบัญชี LIS และตรวจสิทธิ์ระบบ',
+  })
+  async telemedicineLogin(@Body() body: LoginDto) {
+    const result = await this.authService.loginTelemedicine(
+      body.username,
+      body.password,
+    );
+    const { refreshToken: _refreshToken, ...safeResult } = result;
+    return safeResult;
+  }
+
+  @Public()
   @Post('logout')
   @ApiOperation({ summary: 'ออกจากระบบ (Logout) และทำลาย HttpOnly Cookie' })
   @ApiResponse({ status: 200, description: 'ออกจากระบบสำเร็จ' })
