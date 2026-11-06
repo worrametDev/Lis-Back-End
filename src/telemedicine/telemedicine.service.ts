@@ -253,14 +253,33 @@ export class TelemedicineService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    const queue = await this.prisma.telemedicineQueue.findFirst({
+    const pastQueues = await this.prisma.telemedicineQueue.findMany({
       where: { hn },
       include: { clientSite: true, parentSite: true },
       orderBy: { createdAt: 'desc' },
+      take: 20,
     });
+    const queue = pastQueues[0] || null;
     if (!order && !queue) {
       throw new NotFoundException('ไม่พบข้อมูลผู้ป่วยใน LIS หรือ Telemedicine');
     }
+    const vitalsHistory = pastQueues
+      .map((q) => {
+        const t = (q.triageData || {}) as Record<string, any>;
+        return {
+          id: q.id,
+          queueNo: q.queueNumber,
+          recordedAt: t.recordedAt || q.createdAt.toISOString(),
+          bp: t.bp || '-',
+          hr: Number(t.hr || 0),
+          temp: Number(t.temp || 0),
+          rr: Number(t.rr || 0),
+          spo2: Number(t.spo2 || 0),
+          site: q.clientSite?.siteName || '-',
+        };
+      })
+      .filter((v) => (v.bp && v.bp !== '-') || v.hr > 0 || v.temp > 0);
+
     if (!order && queue) {
       const vitals = (queue.triageData || {}) as Record<string, any>;
       return {
@@ -285,6 +304,7 @@ export class TelemedicineService {
           spo2: Number(vitals.spo2 || 0),
           recordedAt: vitals.recordedAt || queue.updatedAt.toISOString(),
         },
+        vitalsHistory,
         labResults: [],
       };
     }
@@ -311,6 +331,7 @@ export class TelemedicineService {
         spo2: Number(vitals.spo2 || 0),
         recordedAt: vitals.recordedAt || queue?.updatedAt.toISOString() || '',
       },
+      vitalsHistory,
       labResults: order.samples.flatMap((sample) =>
         sample.testResults.map((result) => ({
           testName: result.testName,
