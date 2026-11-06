@@ -2,7 +2,17 @@ import { Injectable, Logger, ConflictException, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
-import { ResultFlag, SpecimenStatus, OrderStatus } from '@prisma/client';
+import {
+  ResultFlag,
+  SpecimenStatus,
+  OrderStatus,
+  Prisma,
+} from '@prisma/client';
+
+export interface MiddlewareTelemetry {
+  channelsCount?: number;
+  pendingOutboxCount?: number;
+}
 
 export interface CloudResultPayload {
   messageId: string;
@@ -42,7 +52,7 @@ export class MiddlewareService {
       where: { siteCode: siteCode || '00940' },
     });
 
-    const whereClause: any = {
+    const whereClause: Prisma.OrderWhereInput = {
       status: {
         in: [
           OrderStatus.REGISTERED,
@@ -78,13 +88,18 @@ export class MiddlewareService {
         const specimenId = `${s.labNumber}-${suffix}`;
 
         // Extract test items from JSON or sample
-        const orderItems = Array.isArray(o.orderItems)
-          ? (o.orderItems as any[])
-          : [];
+        const orderItems = Array.isArray(o.orderItems) ? o.orderItems : [];
         const tests =
           orderItems.length > 0
             ? orderItems.map((item) => ({
-                testCode: item.testCode || item.code || 'CHOL',
+                testCode:
+                  item && typeof item === 'object'
+                    ? String(
+                        ('testCode' in item && item.testCode) ||
+                          ('code' in item && item.code) ||
+                          'CHOL',
+                      )
+                    : String(item || 'CHOL'),
                 status: 'ACTIVE',
               }))
             : [
@@ -122,11 +137,32 @@ export class MiddlewareService {
   async receiveResults(siteCode: string, payload: CloudResultPayload) {
     const { messageId, specimenId, instrument, results } = payload;
     const crypto = await import('crypto');
-    const payloadHash = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+    const payloadHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(payload))
+      .digest('hex');
 
-    const prior = await this.prisma.middlewareReceipt.findUnique({ where: { siteCode_messageId: { siteCode, messageId } } });
-    if (prior) { if (prior.payloadHash !== payloadHash) throw new ConflictException(`Message ${messageId} already exists with a different payload`); return prior.responseJson || { success: true, duplicate: true, messageId }; }
-    await this.prisma.middlewareReceipt.create({ data: { siteCode, messageId, specimenId, payloadHash, status: 'RECEIVED' } });
+    const prior = await this.prisma.middlewareReceipt.findUnique({
+      where: { siteCode_messageId: { siteCode, messageId } },
+    });
+    if (prior) {
+      if (prior.payloadHash !== payloadHash)
+        throw new ConflictException(
+          `Message ${messageId} already exists with a different payload`,
+        );
+      return (
+        prior.responseJson || { success: true, duplicate: true, messageId }
+      );
+    }
+    await this.prisma.middlewareReceipt.create({
+      data: {
+        siteCode,
+        messageId,
+        specimenId,
+        payloadHash,
+        status: 'RECEIVED',
+      },
+    });
 
     this.logger.log(
       `Received ${results.length} results for Specimen ${specimenId} from ${instrument.model}`,
@@ -177,7 +213,9 @@ export class MiddlewareService {
                 instrumentCode: res.instrumentCode || res.testCode,
                 rawValue: res.rawValue || res.value,
                 valueType: res.valueType,
-                resultedAt: res.resultedAt ? new Date(res.resultedAt) : undefined,
+                resultedAt: res.resultedAt
+                  ? new Date(res.resultedAt)
+                  : undefined,
                 middlewareMessageId: messageId,
                 middlewareChannel: instrument.channel,
                 middlewareModel: instrument.model,
@@ -198,7 +236,9 @@ export class MiddlewareService {
                 instrumentCode: res.instrumentCode || res.testCode,
                 rawValue: res.rawValue || res.value,
                 valueType: res.valueType,
-                resultedAt: res.resultedAt ? new Date(res.resultedAt) : undefined,
+                resultedAt: res.resultedAt
+                  ? new Date(res.resultedAt)
+                  : undefined,
                 middlewareMessageId: messageId,
                 middlewareChannel: instrument.channel,
                 middlewareModel: instrument.model,
@@ -231,11 +271,18 @@ export class MiddlewareService {
       specimenId,
       processedCount: results.length,
     };
-    await this.prisma.middlewareReceipt.update({ where: { siteCode_messageId: { siteCode, messageId } }, data: { status: 'PROCESSED', processedAt: new Date(), responseJson: response } });
+    await this.prisma.middlewareReceipt.update({
+      where: { siteCode_messageId: { siteCode, messageId } },
+      data: {
+        status: 'PROCESSED',
+        processedAt: new Date(),
+        responseJson: response,
+      },
+    });
     return response;
   }
 
-  recordHeartbeat(siteCode: string, telemetry: any) {
+  recordHeartbeat(siteCode: string, telemetry: MiddlewareTelemetry = {}) {
     this.logger.debug(
       `Heartbeat from Site ${siteCode}: channels=${telemetry.channelsCount}, pending=${telemetry.pendingOutboxCount}`,
     );

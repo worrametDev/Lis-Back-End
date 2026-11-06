@@ -11,6 +11,7 @@ import {
 import { WorkstationWorkflowService } from './workstation-workflow.service';
 import { WorkstationService } from './workstation.service';
 import { UpdateResultsDto } from './dto/update-results.dto';
+import { AuthenticatedRequest } from '../auth/authenticated-request';
 import {
   ApproveDto,
   ChangeResultsDto,
@@ -34,7 +35,10 @@ export class WorkstationController {
   }
 
   @Post('transfer-repeat')
-  transferRepeat(@Body() body: SampleResultsDto, @Req() req: any) {
+  transferRepeat(
+    @Body() body: SampleResultsDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.workflow.transferRepeat(
       body.sampleId,
       body.resultIds,
@@ -46,13 +50,13 @@ export class WorkstationController {
   report(
     @Body()
     body: ReportDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.workflow.report(body.sampleId, body.items, req.user.sub);
   }
 
   @Post('repeat')
-  repeat(@Body() body: SampleResultsDto, @Req() req: any) {
+  repeat(@Body() body: SampleResultsDto, @Req() req: AuthenticatedRequest) {
     return this.workflow.repeat(body.sampleId, body.resultIds, req.user.sub);
   }
 
@@ -157,7 +161,7 @@ export class WorkstationController {
   approve(
     @Body()
     body: ApproveDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.workflow.approve(body.sampleId, body.resultIds, req.user.sub);
   }
@@ -209,7 +213,7 @@ export class WorkstationController {
   deleteResults(
     @Body()
     body: ChangeResultsDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.workflow.changeResults(
       { ...body, sampleId: body.sampleId! },
@@ -243,7 +247,7 @@ export class WorkstationController {
   reStatus(
     @Body()
     body: ChangeResultsDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.workflow.changeResults(
       { ...body, sampleId: body.sampleId! },

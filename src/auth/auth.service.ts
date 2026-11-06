@@ -3,6 +3,14 @@ import { JwtAuthService } from './jwt.service';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'crypto';
+import type { Prisma } from '@prisma/client';
+
+type AuthenticatedUserRecord = Omit<
+  Prisma.UserGetPayload<{
+    include: { parentSite: true; clientSite: true };
+  }>,
+  'passwordHash'
+>;
 
 @Injectable()
 export class AuthService {
@@ -11,7 +19,10 @@ export class AuthService {
     private readonly jwtService: JwtAuthService,
   ) {}
 
-  async validateUser(username: string, pass: string): Promise<any> {
+  async validateUser(
+    username: string,
+    pass: string,
+  ): Promise<AuthenticatedUserRecord> {
     const user = await this.prisma.user.findUnique({
       where: { username },
       include: {
@@ -42,9 +53,7 @@ export class AuthService {
       where: { siteStatus: 'Active' },
       orderBy: { createdAt: 'asc' },
     });
-    return (
-      primarySite?.siteName || process.env.HOSPITAL_NAME || ''
-    );
+    return primarySite?.siteName || process.env.HOSPITAL_NAME || '';
   }
 
   async login(username: string, pass: string) {
@@ -73,9 +82,7 @@ export class AuthService {
         status: user.userStatus,
         parentSite: user.parentSite?.siteName || defaultParent,
         parentSiteId: user.parentSiteId || '',
-        clientSite:
-          user.clientSite?.siteName ||
-          '',
+        clientSite: user.clientSite?.siteName || '',
         clientSiteId: user.clientSiteId || '',
         licenseNo: user.licenseNo || '',
         province: user.province || '',
@@ -158,8 +165,7 @@ export class AuthService {
       status: user.userStatus,
       parentSite: user.parentSite?.siteName || defaultParent,
       parentSiteId: user.parentSiteId || '',
-      clientSite:
-        user.clientSite?.siteName || '',
+      clientSite: user.clientSite?.siteName || '',
       clientSiteId: user.clientSiteId || '',
       licenseNo: user.licenseNo || '',
       province: user.province || '',

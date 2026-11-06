@@ -7,8 +7,9 @@ import {
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole, UserStatus } from '@prisma/client';
+import { UserRole, UserStatus, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { CreateUserDto, UpdateUserDto } from './dto/user.dto';
 
 @Injectable()
 export class UsersService {
@@ -46,10 +47,16 @@ export class UsersService {
     return UserStatus.ACTIVE;
   }
 
-  async findAll(search?: string, role?: string, status?: string, page = 1, pageSize = 50) {
+  async findAll(
+    search?: string,
+    role?: string,
+    status?: string,
+    page = 1,
+    pageSize = 50,
+  ) {
     page = Math.max(1, Number(page) || 1);
     pageSize = Math.min(200, Math.max(1, Number(pageSize) || 50));
-    const where: any = {};
+    const where: Prisma.UserWhereInput = {};
     if (role) {
       where.userRole = this.mapRole(role);
     }
@@ -69,8 +76,8 @@ export class UsersService {
       this.prisma.user.findMany({
         where,
         include: {
-        parentSite: true,
-        clientSite: true,
+          parentSite: true,
+          clientSite: true,
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
@@ -108,11 +115,15 @@ export class UsersService {
       telemedicineRole: u.telemedicineRole || '',
       createdAt: u.createdAt,
     }));
-    return { data, meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };
+    return {
+      data,
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
   }
 
   async getOptions() {
-    const cached = await this.cacheManager.get<any>('user_options');
+    const cached =
+      await this.cacheManager.get<Record<string, unknown>>('user_options');
     if (cached) return cached;
 
     const parentSites = await this.prisma.parentSite.findMany({
@@ -193,32 +204,7 @@ export class UsersService {
     };
   }
 
-  async create(data: {
-    username: string;
-    password?: string;
-    firstName: string;
-    lastName?: string;
-    email?: string;
-    telNo?: string;
-    position?: string;
-    organization?: string;
-    role?: string;
-    userRole?: string;
-    userStatus?: string;
-    status?: string;
-    siteName?: string;
-    clientSite?: string;
-    parentSite?: string;
-    license?: string;
-    licenseNo?: string;
-    province?: string;
-    healthRegion?: string;
-    signatureUrl?: string;
-    parentSiteId?: string;
-    clientSiteId?: string;
-    telemedicineAccess?: boolean;
-    telemedicineRole?: string;
-  }) {
+  async create(data: CreateUserDto) {
     if (!data.username || !data.firstName) {
       throw new BadRequestException('กรุณาระบุ Username และ First Name');
     }
@@ -345,23 +331,26 @@ export class UsersService {
     };
   }
 
-  async update(id: string, data: any) {
+  async update(id: string, data: UpdateUserDto) {
     await this.findOne(id);
-    const updateData: any = { ...data };
+    const updateData: Record<string, unknown> = { ...data };
 
     if (updateData.password) {
-      updateData.passwordHash = bcrypt.hashSync(updateData.password, 10);
+      updateData.passwordHash = bcrypt.hashSync(
+        String(updateData.password),
+        10,
+      );
       delete updateData.password;
     }
     if (updateData.role || updateData.userRole) {
       updateData.userRole = this.mapRole(
-        updateData.role || updateData.userRole,
+        String(updateData.role || updateData.userRole),
       );
       delete updateData.role;
     }
     if (updateData.userStatus || updateData.status) {
       updateData.userStatus = this.mapStatus(
-        updateData.userStatus || updateData.status,
+        String(updateData.userStatus || updateData.status),
       );
       delete updateData.status;
     }
@@ -410,11 +399,22 @@ export class UsersService {
 
     const parentTarget = updateData.parentSite || updateData.siteName;
     if (parentTarget && !updateData.parentSiteId) {
+      const normalizedParentTarget = String(parentTarget);
       const foundParent = await this.prisma.parentSite.findFirst({
         where: {
           OR: [
-            { siteName: { contains: parentTarget, mode: 'insensitive' } },
-            { siteCode: { equals: parentTarget, mode: 'insensitive' } },
+            {
+              siteName: {
+                contains: normalizedParentTarget,
+                mode: 'insensitive',
+              },
+            },
+            {
+              siteCode: {
+                equals: normalizedParentTarget,
+                mode: 'insensitive',
+              },
+            },
           ],
         },
       });
@@ -436,7 +436,7 @@ export class UsersService {
 
     const updated = await this.prisma.user.update({
       where: { id },
-      data: updateData,
+      data: updateData as Prisma.UserUncheckedUpdateInput,
       include: { parentSite: true, clientSite: true },
     });
 

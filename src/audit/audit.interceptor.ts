@@ -4,7 +4,7 @@ import {
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
-import { Observable, tap } from 'rxjs';
+import { Observable, from, switchMap, tap } from 'rxjs';
 import { AuditService } from './audit.service';
 
 @Injectable()
@@ -19,20 +19,32 @@ export class AuditInterceptor implements NestInterceptor {
       req.path.includes('/middleware')
     )
       return next.handle();
-    return next.handle().pipe(
-      tap((result) => {
-        const user = req.user;
-        if (!user?.sub) return;
-        void this.audit.record({
-          userId: user.sub,
-          action: `${method}_${String(req.path).split('/')[1]?.toUpperCase() || 'REQUEST'}`,
-          entityType: String(req.path).split('/')[1] || 'Unknown',
-          entityId: req.params?.id,
-          newValues: result && typeof result === 'object' ? result : undefined,
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
-        });
-      }),
+    const entityType = String(req.path).split('/')[1] || 'Unknown';
+    const entityId = req.params?.id;
+    const oldValuesPromise = ['PUT', 'PATCH', 'DELETE'].includes(method)
+      ? this.audit.snapshot(entityType, entityId)
+      : Promise.resolve(undefined);
+
+    return from(oldValuesPromise).pipe(
+      switchMap((oldValues) =>
+        next.handle().pipe(
+          tap((result) => {
+            const user = req.user;
+            if (!user?.sub) return;
+            void this.audit.record({
+              userId: user.sub,
+              action: `${method}_${String(req.path).split('/')[1]?.toUpperCase() || 'REQUEST'}`,
+              entityType,
+              entityId,
+              oldValues,
+              newValues:
+                result && typeof result === 'object' ? result : undefined,
+              ipAddress: req.ip,
+              userAgent: req.get('user-agent'),
+            });
+          }),
+        ),
+      ),
     );
   }
 }

@@ -1,5 +1,20 @@
-import { IsArray, IsOptional, IsString, Length } from 'class-validator';
+import {
+  IsArray,
+  IsOptional,
+  IsString,
+  Length,
+  ValidateNested,
+} from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+
+export class OrderItemDto {
+  @IsString() testCode!: string;
+  @IsOptional() @IsString() testName?: string;
+  @IsOptional() @IsString() catalogType?: string;
+  @IsOptional() @IsString() department?: string;
+  @IsOptional() @IsString() specimenType?: string;
+}
 
 export class CreateOrderDto {
   @IsString()
@@ -45,7 +60,11 @@ export class CreateOrderDto {
   @IsOptional() @IsString() testPanel?: string;
   @IsOptional() @IsString() testProfile?: string;
   @IsOptional() @IsString() testItem?: string;
-  @IsOptional() @IsArray() orderItems?: Record<string, unknown>[];
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OrderItemDto)
+  orderItems?: OrderItemDto[];
 }
 
 export class UpdateOrderDto extends PartialType(CreateOrderDto) {}

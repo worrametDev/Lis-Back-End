@@ -2,7 +2,28 @@ import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
-import { SpecimenStatus, OrderStatus } from '@prisma/client';
+import { SpecimenStatus, OrderStatus, Prisma } from '@prisma/client';
+
+type CacheWithKeys = Cache & {
+  store?: { keys?: (pattern: string) => Promise<string[]> };
+};
+
+function findOrderItemTestCode(
+  items: Prisma.JsonValue,
+  profileTestName: string | null,
+): string {
+  if (!Array.isArray(items)) return '';
+  const match = items.find(
+    (item) =>
+      item !== null &&
+      typeof item === 'object' &&
+      !Array.isArray(item) &&
+      String(item.testName || '') === String(profileTestName || ''),
+  );
+  return match && typeof match === 'object' && !Array.isArray(match)
+    ? String(match.testCode || '')
+    : '';
+}
 
 @Injectable()
 export class SamplesService {
@@ -34,7 +55,7 @@ export class SamplesService {
     }>(cacheKey);
     if (cached) return cached;
 
-    const where: any = {};
+    const where: Prisma.SampleWhereInput = {};
     if (query?.status) {
       where.status = query.status as SpecimenStatus;
     }
@@ -125,12 +146,7 @@ export class SamplesService {
       gender: s.order.gender || '',
       parentSite: s.order.parentSite?.siteName || '',
       testCode:
-        (Array.isArray(s.order.orderItems)
-          ? (s.order.orderItems.find(
-              (item: any) => item.testName === s.profileTestName,
-            ) as any)
-          : null
-        )?.testCode ||
+        findOrderItemTestCode(s.order.orderItems, s.profileTestName) ||
         s.testResults[0]?.testPanel ||
         '',
       department: s.testResults[0]?.department?.departmentName || '',
@@ -164,7 +180,7 @@ export class SamplesService {
   async invalidateCache() {
     try {
       await this.cacheManager.del('samples_list_{}');
-      const store: any = (this.cacheManager as any).store;
+      const store = (this.cacheManager as CacheWithKeys).store;
       if (store && typeof store.keys === 'function') {
         const keys = await store.keys('samples_list_*');
         for (const k of keys) {

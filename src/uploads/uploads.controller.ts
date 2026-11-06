@@ -133,9 +133,9 @@ export class UploadsController {
           storedMimeType = 'image/webp';
           ext = '.webp';
         }
-      } catch (sharpError: any) {
+      } catch (sharpError: unknown) {
         throw new BadRequestException(
-          `ไม่สามารถตรวจสอบหรือปรับขนาดรูปภาพได้: ${sharpError?.message || 'invalid image'}`,
+          `ไม่สามารถตรวจสอบหรือปรับขนาดรูปภาพได้: ${sharpError instanceof Error ? sharpError.message : 'invalid image'}`,
         );
       }
     }
@@ -196,9 +196,9 @@ export class UploadsController {
           mimetype: storedMimeType,
           url: publicUrl,
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         throw new BadRequestException(
-          `เกิดข้อผิดพลาดในการอัปโหลด Supabase: ${err.message}`,
+          `เกิดข้อผิดพลาดในการอัปโหลด Supabase: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }

@@ -18,6 +18,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { CreateUserDto, UpdateUserDto } from './dto/user.dto';
 
 @ApiTags('Users')
 @ApiBearerAuth('JWT-auth')
@@ -140,14 +141,14 @@ export class UsersController {
     },
   })
   @ApiResponse({ status: 201, description: 'สร้างบัญชีผู้ใช้งานสำเร็จ' })
-  async create(@Body() body: any) {
+  async create(@Body() body: CreateUserDto) {
     return this.usersService.create(body);
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'แก้ไขข้อมูลผู้ใช้งาน' })
   @ApiParam({ name: 'id', description: 'User ID' })
-  async update(@Param('id') id: string, @Body() body: any) {
+  async update(@Param('id') id: string, @Body() body: UpdateUserDto) {
     return this.usersService.update(id, body);
   }
 

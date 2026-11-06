@@ -13,7 +13,12 @@ export class DashboardService {
 
   async getStats() {
     const cacheKey = 'dashboard_stats';
-    const cached = await this.cacheManager.get<any>(cacheKey);
+    const cached = await this.cacheManager.get<{
+      pendingOrders: number;
+      pendingSamples: number;
+      pendingApproval: number;
+      approvedToday: number;
+    }>(cacheKey);
     if (cached) return cached;
 
     const today = new Date();

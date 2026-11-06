@@ -4,6 +4,15 @@ import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResultFlag, SpecimenStatus, OrderStatus } from '@prisma/client';
 
+type CacheWithKeys = Cache & {
+  store?: { keys?: (pattern: string) => Promise<string[]> };
+};
+
+export interface PaginatedWorkstationQueue {
+  data: Array<Record<string, unknown>>;
+  meta: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
 @Injectable()
 export class WorkstationService {
   constructor(
@@ -15,7 +24,8 @@ export class WorkstationService {
     const page = Math.max(1, Number(query?.page) || 1);
     const pageSize = Math.min(200, Math.max(1, Number(query?.pageSize) || 50));
     const cacheKey = `workstation_queue_${page}_${pageSize}`;
-    const cached = await this.cacheManager.get<any>(cacheKey);
+    const cached =
+      await this.cacheManager.get<PaginatedWorkstationQueue>(cacheKey);
     if (cached) return cached;
 
     const where = {
@@ -107,7 +117,8 @@ export class WorkstationService {
 
   async getResults(sampleId: string) {
     const cacheKey = `workstation_results_${sampleId}`;
-    const cached = await this.cacheManager.get<any[]>(cacheKey);
+    const cached =
+      await this.cacheManager.get<Array<Record<string, unknown>>>(cacheKey);
     if (cached) return cached;
 
     // 1. ค้นหาข้อมูล Sample ปัจจุบัน พร้อม Order และ Client Site
@@ -354,7 +365,7 @@ export class WorkstationService {
       await this.cacheManager.del(`workstation_results_${sampleId}`);
       await this.cacheManager.del('dashboard_stats');
       await this.cacheManager.del('workstation_queue');
-      const store: any = (this.cacheManager as any).store;
+      const store = (this.cacheManager as CacheWithKeys).store;
       if (store && typeof store.keys === 'function') {
         const keys = await store.keys('workstation_queue_*');
         for (const key of keys) await this.cacheManager.del(key);

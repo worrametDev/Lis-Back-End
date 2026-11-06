@@ -5,6 +5,10 @@ import type { Cache } from 'cache-manager';
 import { SpecimenStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
+type CacheWithKeys = Cache & {
+  store?: { keys?: (pattern: string) => Promise<string[]> };
+};
+
 @Injectable()
 export class WorkstationWorkflowService {
   constructor(
@@ -271,8 +275,9 @@ export class WorkstationWorkflowService {
       'dashboard_stats',
       'samples_list_{}',
       'orders_list_{}',
-    ]) await this.cache.del(key);
-    const store: any = (this.cache as any).store;
+    ])
+      await this.cache.del(key);
+    const store = (this.cache as CacheWithKeys).store;
     if (store && typeof store.keys === 'function') {
       const keys = await store.keys('workstation_queue_*');
       for (const key of keys) await this.cache.del(key);

@@ -16,9 +16,11 @@ export class PrismaService
     try {
       await this.$connect();
       this.logger.log('Connected to PostgreSQL database via Prisma');
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.logger.warn('Could not connect to PostgreSQL database.');
-      this.logger.warn(`Reason: ${error.message}`);
+      this.logger.warn(
+        `Reason: ${error instanceof Error ? error.message : String(error)}`,
+      );
       this.logger.warn(
         '💡  Please update DATABASE_URL in backend/.env with your actual PostgreSQL credentials.',
       );

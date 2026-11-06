@@ -19,6 +19,28 @@ import {
 } from '@nestjs/swagger';
 import { MasterDataService } from './master-data.service';
 import { Public } from '../auth/public.decorator';
+import {
+  AnalyzerDto,
+  EthnicityDto,
+  LabTestDto,
+  TestPanelDto,
+  TestProfileDto,
+  TitleDto,
+  ValueListDto,
+} from './dto/catalog.dto';
+import {
+  CreateClientSiteDto,
+  CreateDepartmentDto,
+  CreateParentSiteDto,
+  CreateSampleConditionDto,
+  CreateWardDto,
+  SiteInfoDto,
+  UpdateClientSiteDto,
+  UpdateDepartmentDto,
+  UpdateParentSiteDto,
+  UpdateSampleConditionDto,
+  UpdateWardDto,
+} from './dto/site.dto';
 
 @ApiTags('Master Data')
 @ApiBearerAuth('JWT-auth')
@@ -78,7 +100,7 @@ export class MasterDataController {
     status: 200,
     description: 'บันทึกข้อมูลโรงพยาบาลเรียบร้อยแล้ว',
   })
-  updateSiteInfo(@Body() body: any) {
+  updateSiteInfo(@Body() body: SiteInfoDto) {
     return this.masterDataService.updateSiteInfo(body);
   }
 
@@ -112,14 +134,14 @@ export class MasterDataController {
       required: ['siteCode', 'siteName'],
     },
   })
-  createParentSite(@Body() body: any) {
+  createParentSite(@Body() body: CreateParentSiteDto) {
     return this.masterDataService.createParentSite(body);
   }
 
   @Put('parent-sites/:id')
   @ApiOperation({ summary: 'แก้ไขข้อมูล Parent Site' })
   @ApiParam({ name: 'id', description: 'Parent Site ID' })
-  updateParentSite(@Param('id') id: string, @Body() body: any) {
+  updateParentSite(@Param('id') id: string, @Body() body: UpdateParentSiteDto) {
     return this.masterDataService.updateParentSite(id, body);
   }
 
@@ -175,14 +197,14 @@ export class MasterDataController {
       required: ['siteCode', 'siteName'],
     },
   })
-  createClientSite(@Body() body: any) {
+  createClientSite(@Body() body: CreateClientSiteDto) {
     return this.masterDataService.createClientSite(body);
   }
 
   @Put('client-sites/:id')
   @ApiOperation({ summary: 'แก้ไขข้อมูล Client Site' })
   @ApiParam({ name: 'id', description: 'Client Site ID' })
-  updateClientSite(@Param('id') id: string, @Body() body: any) {
+  updateClientSite(@Param('id') id: string, @Body() body: UpdateClientSiteDto) {
     return this.masterDataService.updateClientSite(id, body);
   }
 
@@ -223,14 +245,14 @@ export class MasterDataController {
       required: ['wardCode', 'wardName'],
     },
   })
-  createWard(@Body() body: any) {
+  createWard(@Body() body: CreateWardDto) {
     return this.masterDataService.createWard(body);
   }
 
   @Put('wards/:id')
   @ApiOperation({ summary: 'แก้ไขข้อมูล Ward' })
   @ApiParam({ name: 'id', description: 'Ward ID' })
-  updateWard(@Param('id') id: string, @Body() body: any) {
+  updateWard(@Param('id') id: string, @Body() body: UpdateWardDto) {
     return this.masterDataService.updateWard(id, body);
   }
 
@@ -275,14 +297,14 @@ export class MasterDataController {
       required: ['departmentCode', 'departmentName'],
     },
   })
-  createDepartment(@Body() body: any) {
+  createDepartment(@Body() body: CreateDepartmentDto) {
     return this.masterDataService.createDepartment(body);
   }
 
   @Put('departments/:id')
   @ApiOperation({ summary: 'แก้ไขข้อมูล Department' })
   @ApiParam({ name: 'id', description: 'Department ID' })
-  updateDepartment(@Param('id') id: string, @Body() body: any) {
+  updateDepartment(@Param('id') id: string, @Body() body: UpdateDepartmentDto) {
     return this.masterDataService.updateDepartment(id, body);
   }
 
@@ -333,14 +355,17 @@ export class MasterDataController {
       required: ['conditionCode', 'conditionName'],
     },
   })
-  createSampleCondition(@Body() body: any) {
+  createSampleCondition(@Body() body: CreateSampleConditionDto) {
     return this.masterDataService.createSampleCondition(body);
   }
 
   @Put('sample-conditions/:id')
   @ApiOperation({ summary: 'แก้ไขข้อมูล Sample Condition' })
   @ApiParam({ name: 'id', description: 'Sample Condition ID' })
-  updateSampleCondition(@Param('id') id: string, @Body() body: any) {
+  updateSampleCondition(
+    @Param('id') id: string,
+    @Body() body: UpdateSampleConditionDto,
+  ) {
     return this.masterDataService.updateSampleCondition(id, body);
   }
 
@@ -362,13 +387,13 @@ export class MasterDataController {
 
   @Post('titles')
   @ApiOperation({ summary: 'สร้างคำนำหน้าชื่อใหม่' })
-  createTitle(@Body() body: any) {
+  createTitle(@Body() body: TitleDto) {
     return this.masterDataService.createTitle(body);
   }
 
   @Put('titles/:id')
   @ApiOperation({ summary: 'แก้ไขคำนำหน้าชื่อ' })
-  updateTitle(@Param('id') id: string, @Body() body: any) {
+  updateTitle(@Param('id') id: string, @Body() body: TitleDto) {
     return this.masterDataService.updateTitle(id, body);
   }
 
@@ -389,13 +414,13 @@ export class MasterDataController {
 
   @Post('ethnicities')
   @ApiOperation({ summary: 'สร้างเชื้อชาติใหม่' })
-  createEthnicity(@Body() body: any) {
+  createEthnicity(@Body() body: EthnicityDto) {
     return this.masterDataService.createEthnicity(body);
   }
 
   @Put('ethnicities/:id')
   @ApiOperation({ summary: 'แก้ไขเชื้อชาติ' })
-  updateEthnicity(@Param('id') id: string, @Body() body: any) {
+  updateEthnicity(@Param('id') id: string, @Body() body: EthnicityDto) {
     return this.masterDataService.updateEthnicity(id, body);
   }
 
@@ -416,13 +441,13 @@ export class MasterDataController {
 
   @Post('test-panels')
   @ApiOperation({ summary: 'สร้างชุดการตรวจใหม่' })
-  createTestPanel(@Body() body: any) {
+  createTestPanel(@Body() body: TestPanelDto) {
     return this.masterDataService.createTestPanel(body);
   }
 
   @Put('test-panels/:id')
   @ApiOperation({ summary: 'แก้ไขชุดการตรวจ' })
-  updateTestPanel(@Param('id') id: string, @Body() body: any) {
+  updateTestPanel(@Param('id') id: string, @Body() body: TestPanelDto) {
     return this.masterDataService.updateTestPanel(id, body);
   }
 
@@ -443,13 +468,13 @@ export class MasterDataController {
 
   @Post('value-lists')
   @ApiOperation({ summary: 'สร้าง Value List ใหม่' })
-  createValueList(@Body() body: any) {
+  createValueList(@Body() body: ValueListDto) {
     return this.masterDataService.createValueList(body);
   }
 
   @Put('value-lists/:id')
   @ApiOperation({ summary: 'แก้ไข Value List' })
-  updateValueList(@Param('id') id: string, @Body() body: any) {
+  updateValueList(@Param('id') id: string, @Body() body: ValueListDto) {
     return this.masterDataService.updateValueList(id, body);
   }
 
@@ -470,13 +495,13 @@ export class MasterDataController {
 
   @Post('tests')
   @ApiOperation({ summary: 'สร้าง Test ใหม่พร้อม Test Items ภายใน' })
-  createTest(@Body() body: any) {
+  createTest(@Body() body: LabTestDto) {
     return this.masterDataService.createTest(body);
   }
 
   @Put('tests/:id')
   @ApiOperation({ summary: 'แก้ไข Test พร้อมเรียงลำดับ Test Items' })
-  updateTest(@Param('id') id: string, @Body() body: any) {
+  updateTest(@Param('id') id: string, @Body() body: LabTestDto) {
     return this.masterDataService.updateTest(id, body);
   }
 
@@ -497,13 +522,13 @@ export class MasterDataController {
 
   @Post('test-profiles')
   @ApiOperation({ summary: 'สร้าง Test Profile ใหม่' })
-  createTestProfile(@Body() body: any) {
+  createTestProfile(@Body() body: TestProfileDto) {
     return this.masterDataService.createTestProfile(body);
   }
 
   @Put('test-profiles/:id')
   @ApiOperation({ summary: 'แก้ไข Test Profile' })
-  updateTestProfile(@Param('id') id: string, @Body() body: any) {
+  updateTestProfile(@Param('id') id: string, @Body() body: TestProfileDto) {
     return this.masterDataService.updateTestProfile(id, body);
   }
 
@@ -529,13 +554,13 @@ export class MasterDataController {
   @ApiOperation({
     summary: 'สร้างเครื่องตรวจวิเคราะห์ใหม่พร้อม Order Codes & Result Codes',
   })
-  createAnalyzer(@Body() body: any) {
+  createAnalyzer(@Body() body: AnalyzerDto) {
     return this.masterDataService.createAnalyzer(body);
   }
 
   @Put('analyzers/:id')
   @ApiOperation({ summary: 'แก้ไขเครื่องตรวจวิเคราะห์' })
-  updateAnalyzer(@Param('id') id: string, @Body() body: any) {
+  updateAnalyzer(@Param('id') id: string, @Body() body: AnalyzerDto) {
     return this.masterDataService.updateAnalyzer(id, body);
   }
 

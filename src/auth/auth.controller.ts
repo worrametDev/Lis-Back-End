@@ -188,7 +188,7 @@ export class AuthController {
     }
 
     try {
-      const decoded: any = this.jwtService.verify(token);
+      const decoded = this.jwtService.verify<{ sub: string }>(token);
       return this.authService.getProfile(decoded.sub);
     } catch {
       throw new UnauthorizedException('Token ไม่ถูกต้องหรือหมดอายุการใช้งาน');

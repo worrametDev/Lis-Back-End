@@ -7,6 +7,29 @@ import {
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
+import type { ParentSite, Prisma } from '@prisma/client';
+import {
+  AnalyzerDto,
+  EthnicityDto,
+  LabTestDto,
+  TestPanelDto,
+  TestProfileDto,
+  TitleDto,
+  ValueListDto,
+} from './dto/catalog.dto';
+import {
+  CreateClientSiteDto,
+  CreateDepartmentDto,
+  CreateParentSiteDto,
+  CreateSampleConditionDto,
+  CreateWardDto,
+  SiteInfoDto,
+  UpdateClientSiteDto,
+  UpdateDepartmentDto,
+  UpdateParentSiteDto,
+  UpdateSampleConditionDto,
+  UpdateWardDto,
+} from './dto/site.dto';
 
 @Injectable()
 export class MasterDataService {
@@ -29,12 +52,12 @@ export class MasterDataService {
         latencyMs,
         timestamp: new Date().toISOString(),
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
         status: 'DISCONNECTED',
         database: 'PostgreSQL',
         latencyMs: Date.now() - start,
-        error: err.message,
+        error: err instanceof Error ? err.message : String(err),
         timestamp: new Date().toISOString(),
       };
     }
@@ -44,7 +67,9 @@ export class MasterDataService {
   // 1. PARENT SITES
   // ==========================================
   async findAllParentSites() {
-    const cached = await this.cacheManager.get<any[]>('master_parent_sites');
+    const cached = await this.cacheManager.get<Array<Record<string, unknown>>>(
+      'master_parent_sites',
+    );
     if (cached) return cached;
 
     const sites = await this.prisma.parentSite.findMany({
@@ -57,8 +82,13 @@ export class MasterDataService {
   }
 
   async getSiteInfo() {
-    const cached = await this.cacheManager.get<any>('master_site_info');
-    if (cached && cached.siteName && !cached.siteName.includes('?'))
+    const cached =
+      await this.cacheManager.get<Record<string, unknown>>('master_site_info');
+    if (
+      cached &&
+      typeof cached.siteName === 'string' &&
+      !cached.siteName.includes('?')
+    )
       return cached;
 
     const primarySite = await this.prisma.parentSite.findFirst({
@@ -74,10 +104,7 @@ export class MasterDataService {
       return val;
     };
 
-    const siteName = cleanStr(
-      primarySite?.siteName,
-      envHospitalName || '',
-    );
+    const siteName = cleanStr(primarySite?.siteName, envHospitalName || '');
     const siteCode = primarySite?.siteCode || '';
     const province = cleanStr(primarySite?.province, '');
     const district = cleanStr(primarySite?.district, '');
@@ -114,18 +141,7 @@ export class MasterDataService {
     return result;
   }
 
-  async updateSiteInfo(data: {
-    siteCode?: string;
-    siteName?: string;
-    hospitalNameEn?: string;
-    displayName?: string;
-    address?: string;
-    subdistrict?: string;
-    district?: string;
-    province?: string;
-    zipcode?: string;
-    lnPattern?: string;
-  }) {
+  async updateSiteInfo(data: SiteInfoDto) {
     let primarySite = await this.prisma.parentSite.findFirst({
       where: { siteStatus: 'Active' },
       orderBy: { createdAt: 'asc' },
@@ -147,8 +163,10 @@ export class MasterDataService {
       primarySite?.siteName,
       process.env.HOSPITAL_NAME || '',
     );
-    const hospitalNameEn = data.hospitalNameEn || process.env.HOSPITAL_NAME_EN || '';
-    if (!siteName || (!primarySite && !data.siteCode)) throw new BadRequestException('กรุณาระบุรหัสและชื่อหน่วยงาน');
+    const hospitalNameEn =
+      data.hospitalNameEn || process.env.HOSPITAL_NAME_EN || '';
+    if (!siteName || (!primarySite && !data.siteCode))
+      throw new BadRequestException('กรุณาระบุรหัสและชื่อหน่วยงาน');
 
     let displayName = data.displayName;
     if (!displayName || displayName.includes('?')) {
@@ -171,16 +189,8 @@ export class MasterDataService {
             primarySite.subdistrict,
             '',
           ),
-          district: cleanInput(
-            data.district,
-            primarySite.district,
-            '',
-          ),
-          province: cleanInput(
-            data.province,
-            primarySite.province,
-            '',
-          ),
+          district: cleanInput(data.district, primarySite.district, ''),
+          province: cleanInput(data.province, primarySite.province, ''),
           zipcode:
             data.zipcode !== undefined ? data.zipcode : primarySite.zipcode,
           lnPattern:
@@ -229,20 +239,7 @@ export class MasterDataService {
     return result;
   }
 
-  async createParentSite(data: {
-    siteCode: string;
-    siteName: string;
-    siteType?: string;
-    siteStatus?: string;
-    lnPattern?: string;
-    address?: string;
-    subdistrict?: string;
-    district?: string;
-    province?: string;
-    zipcode?: string;
-    hospitalFile?: string;
-    isoFile?: string;
-  }) {
+  async createParentSite(data: CreateParentSiteDto) {
     if (!data.siteCode || !data.siteName) {
       throw new BadRequestException('กรุณาระบุ SITE CODE และ SITE NAME');
     }
@@ -280,7 +277,7 @@ export class MasterDataService {
     return created;
   }
 
-  async updateParentSite(id: string, data: any) {
+  async updateParentSite(id: string, data: UpdateParentSiteDto) {
     const allowed = [
       'siteCode',
       'siteName',
@@ -295,7 +292,7 @@ export class MasterDataService {
       'hospitalFile',
       'isoFile',
     ];
-    const updateData: any = {};
+    const updateData: Prisma.ParentSiteUncheckedUpdateInput = {};
     for (const key of allowed) {
       if (data[key] !== undefined) updateData[key] = data[key];
     }
@@ -376,10 +373,11 @@ export class MasterDataService {
   // ==========================================
   async findAllClientSites(parentSiteId?: string) {
     const cacheKey = `master_client_sites_${parentSiteId || 'all'}`;
-    const cached = await this.cacheManager.get<any[]>(cacheKey);
+    const cached =
+      await this.cacheManager.get<Array<Record<string, unknown>>>(cacheKey);
     if (cached) return cached;
 
-    const where: any = {};
+    const where: Prisma.ClientSiteWhereInput = {};
     if (parentSiteId) where.parentSiteId = parentSiteId;
 
     const sites = await this.prisma.clientSite.findMany({
@@ -413,22 +411,7 @@ export class MasterDataService {
     return mapped;
   }
 
-  async createClientSite(data: {
-    siteCode: string;
-    siteName: string;
-    parentSiteId?: string;
-    parentSiteCode?: string;
-    siteType?: string;
-    siteStatus?: string;
-    lnPattern?: string;
-    address?: string;
-    subdistrict?: string;
-    district?: string;
-    province?: string;
-    zipcode?: string;
-    hospitalFile?: string;
-    isoFile?: string;
-  }) {
+  async createClientSite(data: CreateClientSiteDto) {
     if (!data.siteCode || !data.siteName) {
       throw new BadRequestException('กรุณาระบุ SITE CODE และ SITE NAME');
     }
@@ -445,15 +428,15 @@ export class MasterDataService {
     // Resolve parent site
     let parentSiteId = data.parentSiteId;
     if (!parentSiteId || parentSiteId === 'default') {
-      let parent: any = null;
+      let parent: ParentSite | null = null;
       if (data.parentSiteCode) {
         parent = await this.prisma.parentSite.findFirst({
           where: { siteCode: data.parentSiteCode },
         });
       }
-      if (!parent && (data as any).parentSiteName) {
+      if (!parent && data.parentSiteName) {
         parent = await this.prisma.parentSite.findFirst({
-          where: { siteName: (data as any).parentSiteName },
+          where: { siteName: data.parentSiteName },
         });
       }
       if (!parent) {
@@ -506,7 +489,7 @@ export class MasterDataService {
     return created;
   }
 
-  async updateClientSite(id: string, data: any) {
+  async updateClientSite(id: string, data: UpdateClientSiteDto) {
     const currentClient = await this.prisma.clientSite.findUnique({
       where: { id },
       include: { parentSite: true },
@@ -529,7 +512,7 @@ export class MasterDataService {
       'hospitalFile',
       'isoFile',
     ];
-    const updateData: any = {};
+    const updateData: Prisma.ClientSiteUncheckedUpdateInput = {};
     for (const key of allowed) {
       if (data[key] !== undefined) updateData[key] = data[key];
     }
@@ -538,14 +521,17 @@ export class MasterDataService {
     }
 
     // 1. จัดการการย้ายสังกัด (Relocation): หากมีการส่ง parentSiteId หรือ parentSiteName/Code ใหม่
-    let targetParentId = updateData.parentSiteId;
+    let targetParentId =
+      typeof updateData.parentSiteId === 'string'
+        ? updateData.parentSiteId
+        : undefined;
     if (!targetParentId && (data.parentSiteName || data.parentSiteCode)) {
       const foundParent = await this.prisma.parentSite.findFirst({
         where: {
           OR: [
-            data.parentSiteCode ? { siteCode: data.parentSiteCode } : undefined,
-            data.parentSiteName ? { siteName: data.parentSiteName } : undefined,
-          ].filter(Boolean) as any,
+            ...(data.parentSiteCode ? [{ siteCode: data.parentSiteCode }] : []),
+            ...(data.parentSiteName ? [{ siteName: data.parentSiteName }] : []),
+          ],
         },
       });
       if (foundParent) {
@@ -623,7 +609,10 @@ export class MasterDataService {
   // 3. WARDS
   // ==========================================
   async findAllWards() {
-    const cached = await this.cacheManager.get<any[]>('master_wards');
+    const cached =
+      await this.cacheManager.get<Array<Record<string, unknown>>>(
+        'master_wards',
+      );
     if (cached) return cached;
 
     const wards = await this.prisma.ward.findMany({
@@ -645,15 +634,7 @@ export class MasterDataService {
     return mapped;
   }
 
-  async createWard(data: {
-    wardCode: string;
-    wardName: string;
-    siteCode?: string;
-    wardStatus?: string;
-    parentSiteId?: string;
-    selectedSites?: any;
-    hospitalFile?: string;
-  }) {
+  async createWard(data: CreateWardDto) {
     if (!data.wardCode || !data.wardName) {
       throw new BadRequestException('กรุณาระบุ WARD CODE และ WARD NAME');
     }
@@ -682,7 +663,7 @@ export class MasterDataService {
     return created;
   }
 
-  async updateWard(id: string, data: any) {
+  async updateWard(id: string, data: UpdateWardDto) {
     const allowed = [
       'wardCode',
       'wardName',
@@ -691,7 +672,7 @@ export class MasterDataService {
       'selectedSites',
       'parentSiteId',
     ];
-    const updateData: any = {};
+    const updateData: Prisma.WardUncheckedUpdateInput = {};
     for (const key of allowed) {
       if (data[key] !== undefined) updateData[key] = data[key];
     }
@@ -726,7 +707,10 @@ export class MasterDataService {
   // 4. DEPARTMENTS
   // ==========================================
   async findAllDepartments() {
-    const cached = await this.cacheManager.get<any[]>('master_departments');
+    const cached =
+      await this.cacheManager.get<Array<Record<string, unknown>>>(
+        'master_departments',
+      );
     if (cached) return cached;
 
     const depts = await this.prisma.department.findMany({
@@ -737,12 +721,7 @@ export class MasterDataService {
     return depts;
   }
 
-  async createDepartment(data: {
-    departmentCode: string;
-    departmentName: string;
-    deptStatus?: string;
-    hospitalFile?: string;
-  }) {
+  async createDepartment(data: CreateDepartmentDto) {
     if (!data.departmentCode || !data.departmentName) {
       throw new BadRequestException(
         'กรุณาระบุ DEPARTMENT CODE และ DEPARTMENT NAME',
@@ -770,14 +749,14 @@ export class MasterDataService {
     return created;
   }
 
-  async updateDepartment(id: string, data: any) {
+  async updateDepartment(id: string, data: UpdateDepartmentDto) {
     const allowed = [
       'departmentCode',
       'departmentName',
       'deptStatus',
       'hospitalFile',
     ];
-    const updateData: any = {};
+    const updateData: Prisma.DepartmentUncheckedUpdateInput = {};
     for (const key of allowed) {
       if (data[key] !== undefined) updateData[key] = data[key];
     }
@@ -814,7 +793,7 @@ export class MasterDataService {
   // 5. SAMPLE CONDITIONS
   // ==========================================
   async findAllSampleConditions() {
-    const cached = await this.cacheManager.get<any[]>(
+    const cached = await this.cacheManager.get<Array<Record<string, unknown>>>(
       'master_sample_conditions',
     );
     if (cached) return cached;
@@ -827,12 +806,7 @@ export class MasterDataService {
     return conditions;
   }
 
-  async createSampleCondition(data: {
-    conditionCode: string;
-    conditionName: string;
-    sampleStatus?: string;
-    isDefault?: boolean;
-  }) {
+  async createSampleCondition(data: CreateSampleConditionDto) {
     if (!data.conditionCode || !data.conditionName) {
       throw new BadRequestException(
         'กรุณาระบุ CONDITION CODE และ CONDITION NAME',
@@ -860,7 +834,7 @@ export class MasterDataService {
     return created;
   }
 
-  async updateSampleCondition(id: string, data: any) {
+  async updateSampleCondition(id: string, data: UpdateSampleConditionDto) {
     const allowed = [
       'conditionCode',
       'conditionName',
@@ -868,7 +842,7 @@ export class MasterDataService {
       'isDefault',
       'hospitalFile',
     ];
-    const updateData: any = {};
+    const updateData: Prisma.SampleConditionUncheckedUpdateInput = {};
     for (const key of allowed) {
       if (data[key] !== undefined) updateData[key] = data[key];
     }
@@ -907,7 +881,9 @@ export class MasterDataService {
   // 6. TITLES (คำนำหน้าชื่อ - Database Persisted)
   // ==========================================
   async findAllTitles() {
-    const list = await this.prisma.title.findMany({ orderBy: { titleCode: 'asc' } });
+    const list = await this.prisma.title.findMany({
+      orderBy: { titleCode: 'asc' },
+    });
     return list.map((t) => ({
       id: t.id,
       titleCode: t.titleCode,
@@ -919,7 +895,7 @@ export class MasterDataService {
     }));
   }
 
-  async createTitle(data: any) {
+  async createTitle(data: TitleDto) {
     const titleNameTh = data.titleNameTh || data.titleName || data.name || '';
     const titleCode = data.titleCode || `T-${Date.now().toString().slice(-4)}`;
     const created = await this.prisma.title.create({
@@ -941,8 +917,8 @@ export class MasterDataService {
     };
   }
 
-  async updateTitle(id: string, data: any) {
-    const updateData: any = {};
+  async updateTitle(id: string, data: TitleDto) {
+    const updateData: Prisma.TitleUpdateInput = {};
     if (data.titleCode) updateData.titleCode = data.titleCode;
     if (data.titleNameTh || data.titleName || data.name) {
       updateData.titleNameTh = data.titleNameTh || data.titleName || data.name;
@@ -975,7 +951,9 @@ export class MasterDataService {
   // 7. ETHNICITIES (เชื้อชาติ - Database Persisted)
   // ==========================================
   async findAllEthnicities() {
-    const list = await this.prisma.ethnicity.findMany({ orderBy: { ethnicityCode: 'asc' } });
+    const list = await this.prisma.ethnicity.findMany({
+      orderBy: { ethnicityCode: 'asc' },
+    });
     return list.map((e) => ({
       id: e.id,
       ethnicityCode: e.ethnicityCode,
@@ -987,7 +965,7 @@ export class MasterDataService {
     }));
   }
 
-  async createEthnicity(data: any) {
+  async createEthnicity(data: EthnicityDto) {
     const ethnicityNameTh =
       data.ethnicityNameTh || data.ethnicityName || data.name || '';
     const ethnicityCode =
@@ -1011,8 +989,8 @@ export class MasterDataService {
     };
   }
 
-  async updateEthnicity(id: string, data: any) {
-    const updateData: any = {};
+  async updateEthnicity(id: string, data: EthnicityDto) {
+    const updateData: Prisma.EthnicityUpdateInput = {};
     if (data.ethnicityCode) updateData.ethnicityCode = data.ethnicityCode;
     if (data.ethnicityNameTh || data.ethnicityName || data.name) {
       updateData.ethnicityNameTh =
@@ -1046,10 +1024,10 @@ export class MasterDataService {
   // 8. TEST PANELS (ชุดการตรวจ - Database Persisted)
   // ==========================================
   async findAllTestPanels() {
-    const list = await (this.prisma.testPanel as any).findMany({
+    const list = await this.prisma.testPanel.findMany({
       orderBy: { panelCode: 'asc' },
     });
-    return list.map((p: any) => ({
+    return list.map((p) => ({
       id: p.id,
       panelCode: p.panelCode,
       panelName: p.panelName,
@@ -1063,18 +1041,20 @@ export class MasterDataService {
     }));
   }
 
-  async createTestPanel(data: any) {
+  async createTestPanel(data: TestPanelDto) {
     const panelCode =
       data.panelCode || data.code || `P-${Date.now().toString().slice(-4)}`;
     const panelName = data.panelName || data.name || '';
-    const created = await (this.prisma.testPanel as any).create({
+    const created = await this.prisma.testPanel.create({
       data: {
         panelCode,
         panelName,
         specimenType: data.specimenType,
         department: data.department,
         testItems: Array.isArray(data.testItems) ? data.testItems : [],
-        selectedSites: Array.isArray(data.selectedSites) ? data.selectedSites : ['ALL'],
+        selectedSites: Array.isArray(data.selectedSites)
+          ? data.selectedSites
+          : ['ALL'],
         status: data.status || 'Active',
       },
     });
@@ -1092,8 +1072,8 @@ export class MasterDataService {
     };
   }
 
-  async updateTestPanel(id: string, data: any) {
-    const updateData: any = {};
+  async updateTestPanel(id: string, data: TestPanelDto) {
+    const updateData: Prisma.TestPanelUpdateInput = {};
     if (data.panelCode || data.code)
       updateData.panelCode = data.panelCode || data.code;
     if (data.panelName || data.name)
@@ -1102,12 +1082,16 @@ export class MasterDataService {
       updateData.specimenType = data.specimenType;
     if (data.department !== undefined) updateData.department = data.department;
     if (data.testItems !== undefined)
-      updateData.testItems = Array.isArray(data.testItems) ? data.testItems : [];
+      updateData.testItems = Array.isArray(data.testItems)
+        ? data.testItems
+        : [];
     if (data.selectedSites !== undefined)
-      updateData.selectedSites = Array.isArray(data.selectedSites) ? data.selectedSites : ['ALL'];
+      updateData.selectedSites = Array.isArray(data.selectedSites)
+        ? data.selectedSites
+        : ['ALL'];
     if (data.status) updateData.status = data.status;
 
-    const updated = await (this.prisma.testPanel as any).update({
+    const updated = await this.prisma.testPanel.update({
       where: { id },
       data: updateData,
     });
@@ -1150,20 +1134,25 @@ export class MasterDataService {
     return this.prisma.valueList.findMany({ orderBy: { code: 'asc' } });
   }
 
-  async createValueList(data: any) {
-    return this.prisma.valueList.create({ data: {
-      code: String(data.code || '').trim(),
-      name: String(data.name || '').trim(),
-      status: data.status || 'Active',
-    } });
+  async createValueList(data: ValueListDto) {
+    return this.prisma.valueList.create({
+      data: {
+        code: String(data.code || '').trim(),
+        name: String(data.name || '').trim(),
+        status: data.status || 'Active',
+      },
+    });
   }
 
-  async updateValueList(id: string, data: any) {
-    return this.prisma.valueList.update({ where: { id }, data: {
-      code: data.code,
-      name: data.name,
-      status: data.status,
-    } });
+  async updateValueList(id: string, data: ValueListDto) {
+    return this.prisma.valueList.update({
+      where: { id },
+      data: {
+        code: data.code,
+        name: data.name,
+        status: data.status,
+      },
+    });
   }
 
   async deleteValueList(id: string) {
@@ -1176,8 +1165,8 @@ export class MasterDataService {
   // ==========================================
   async findAllTests() {
     try {
-      if ((this.prisma as any).labTest) {
-        return await (this.prisma as any).labTest.findMany({
+      if (this.prisma.labTest) {
+        return await this.prisma.labTest.findMany({
           orderBy: { code: 'asc' },
         });
       }
@@ -1185,12 +1174,10 @@ export class MasterDataService {
     throw new BadRequestException('ไม่สามารถโหลด Test จากฐานข้อมูลได้');
   }
 
-  async createTest(data: any) {
+  async createTest(data: LabTestDto) {
     const item = {
       id: `test-${Date.now()}`,
-      code:
-        data.code?.trim() ||
-        `TEST-${Date.now().toString().slice(-4)}`,
+      code: data.code?.trim() || `TEST-${Date.now().toString().slice(-4)}`,
       name: data.name?.trim() || '',
       selectedSites: data.selectedSites || ['ALL'],
       testItems: data.testItems || [],
@@ -1199,8 +1186,8 @@ export class MasterDataService {
       updatedAt: new Date().toISOString(),
     };
     try {
-      if ((this.prisma as any).labTest) {
-        const created = await (this.prisma as any).labTest.create({
+      if (this.prisma.labTest) {
+        const created = await this.prisma.labTest.create({
           data: item,
         });
         if (created) return created;
@@ -1209,10 +1196,10 @@ export class MasterDataService {
     throw new BadRequestException('ไม่สามารถบันทึก Test ลงฐานข้อมูลได้');
   }
 
-  async updateTest(id: string, data: any) {
+  async updateTest(id: string, data: LabTestDto) {
     try {
-      if ((this.prisma as any).labTest) {
-        const updated = await (this.prisma as any).labTest.update({
+      if (this.prisma.labTest) {
+        const updated = await this.prisma.labTest.update({
           where: { id },
           data: {
             code: data.code?.trim(),
@@ -1229,10 +1216,10 @@ export class MasterDataService {
   }
 
   async deleteTest(id: string) {
-    let test: any = null;
+    let test: Awaited<ReturnType<typeof this.prisma.labTest.findUnique>> = null;
     try {
-      if ((this.prisma as any).labTest) {
-        test = await (this.prisma as any).labTest.findUnique({ where: { id } });
+      if (this.prisma.labTest) {
+        test = await this.prisma.labTest.findUnique({ where: { id } });
       }
     } catch {}
     if (test) {
@@ -1249,8 +1236,8 @@ export class MasterDataService {
     }
 
     try {
-      if ((this.prisma as any).labTest) {
-        await (this.prisma as any).labTest.delete({ where: { id } });
+      if (this.prisma.labTest) {
+        await this.prisma.labTest.delete({ where: { id } });
         return { success: true };
       }
     } catch {}
@@ -1262,8 +1249,8 @@ export class MasterDataService {
   // ==========================================
   async findAllTestProfiles() {
     try {
-      if ((this.prisma as any).testProfile) {
-        return await (this.prisma as any).testProfile.findMany({
+      if (this.prisma.testProfile) {
+        return await this.prisma.testProfile.findMany({
           orderBy: { code: 'asc' },
         });
       }
@@ -1271,7 +1258,7 @@ export class MasterDataService {
     throw new BadRequestException('ไม่สามารถโหลด Test Profile จากฐานข้อมูลได้');
   }
 
-  async createTestProfile(data: any) {
+  async createTestProfile(data: TestProfileDto) {
     const item = {
       id: `profile-${Date.now()}`,
       code:
@@ -1285,20 +1272,22 @@ export class MasterDataService {
       updatedAt: new Date().toISOString(),
     };
     try {
-      if ((this.prisma as any).testProfile) {
-        const created = await (this.prisma as any).testProfile.create({
+      if (this.prisma.testProfile) {
+        const created = await this.prisma.testProfile.create({
           data: item,
         });
         if (created) return created;
       }
     } catch {}
-    throw new BadRequestException('ไม่สามารถบันทึก Test Profile ลงฐานข้อมูลได้');
+    throw new BadRequestException(
+      'ไม่สามารถบันทึก Test Profile ลงฐานข้อมูลได้',
+    );
   }
 
-  async updateTestProfile(id: string, data: any) {
+  async updateTestProfile(id: string, data: TestProfileDto) {
     try {
-      if ((this.prisma as any).testProfile) {
-        const updated = await (this.prisma as any).testProfile.update({
+      if (this.prisma.testProfile) {
+        const updated = await this.prisma.testProfile.update({
           where: { id },
           data: {
             code: data.code?.trim().toUpperCase(),
@@ -1316,8 +1305,8 @@ export class MasterDataService {
 
   async deleteTestProfile(id: string) {
     try {
-      if ((this.prisma as any).testProfile) {
-        await (this.prisma as any).testProfile.delete({ where: { id } });
+      if (this.prisma.testProfile) {
+        await this.prisma.testProfile.delete({ where: { id } });
         return { success: true };
       }
     } catch {}
@@ -1329,8 +1318,8 @@ export class MasterDataService {
   // ==========================================
   async findAllAnalyzers() {
     try {
-      if ((this.prisma as any).analyzer) {
-        return await (this.prisma as any).analyzer.findMany({
+      if (this.prisma.analyzer) {
+        return await this.prisma.analyzer.findMany({
           orderBy: { code: 'asc' },
         });
       }
@@ -1338,7 +1327,7 @@ export class MasterDataService {
     throw new BadRequestException('ไม่สามารถโหลด Analyzer จากฐานข้อมูลได้');
   }
 
-  async createAnalyzer(data: any) {
+  async createAnalyzer(data: AnalyzerDto) {
     const item = {
       id: `analyzer-${Date.now()}`,
       code:
@@ -1348,15 +1337,15 @@ export class MasterDataService {
       department: data.department || '',
       protocol: data.protocol || 'ASTM 1394',
       ipAddress: data.ipAddress || '',
-      port: data.port || '',
+      port: data.port === undefined ? '' : String(data.port),
       status: data.status || 'Active',
       orderCodes: data.orderCodes || [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     try {
-      if ((this.prisma as any).analyzer) {
-        const created = await (this.prisma as any).analyzer.create({
+      if (this.prisma.analyzer) {
+        const created = await this.prisma.analyzer.create({
           data: item,
         });
         if (created) return created;
@@ -1365,10 +1354,10 @@ export class MasterDataService {
     throw new BadRequestException('ไม่สามารถบันทึก Analyzer ลงฐานข้อมูลได้');
   }
 
-  async updateAnalyzer(id: string, data: any) {
+  async updateAnalyzer(id: string, data: AnalyzerDto) {
     try {
-      if ((this.prisma as any).analyzer) {
-        const updated = await (this.prisma as any).analyzer.update({
+      if (this.prisma.analyzer) {
+        const updated = await this.prisma.analyzer.update({
           where: { id },
           data: {
             code: data.code?.trim().toUpperCase(),
@@ -1376,7 +1365,7 @@ export class MasterDataService {
             department: data.department,
             protocol: data.protocol,
             ipAddress: data.ipAddress,
-            port: data.port,
+            port: data.port === undefined ? undefined : String(data.port),
             status: data.status,
             orderCodes: data.orderCodes,
           },
@@ -1388,10 +1377,11 @@ export class MasterDataService {
   }
 
   async deleteAnalyzer(id: string) {
-    let analyzer: any = null;
+    let analyzer: Awaited<ReturnType<typeof this.prisma.analyzer.findUnique>> =
+      null;
     try {
-      if ((this.prisma as any).analyzer) {
-        analyzer = await (this.prisma as any).analyzer.findUnique({
+      if (this.prisma.analyzer) {
+        analyzer = await this.prisma.analyzer.findUnique({
           where: { id },
         });
       }
@@ -1413,8 +1403,8 @@ export class MasterDataService {
     }
 
     try {
-      if ((this.prisma as any).analyzer) {
-        await (this.prisma as any).analyzer.delete({ where: { id } });
+      if (this.prisma.analyzer) {
+        await this.prisma.analyzer.delete({ where: { id } });
         return { success: true };
       }
     } catch {}
@@ -1436,7 +1426,7 @@ export class MasterDataService {
 
     const entries: Record<string, any> = {};
     for (const key of keys) {
-      const data: any = await this.cacheManager.get(key);
+      const data = await this.cacheManager.get<unknown>(key);
       const isCached = data !== undefined && data !== null;
       entries[key] = {
         isCached,

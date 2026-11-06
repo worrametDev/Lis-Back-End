@@ -4,6 +4,9 @@
   "description": "",
   "author": "",
   "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
@@ -20,6 +23,10 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:seed": "prisma db seed",
     "db:seed:master": "ts-node prisma/seed-master-data.ts",
+    "db:migrate:status": "prisma migrate status",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:diff": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
+    "load:test": "k6 run test/load/health-and-orders.k6.js",
     "vercel-build": "prisma generate && nest build"
   },
   "dependencies": {
@@ -44,7 +51,7 @@
     "jsonwebtoken": "^9.0.3",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.5",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
@@ -91,8 +98,5 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
-  },
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
   }
 }

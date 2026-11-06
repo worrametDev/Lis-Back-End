@@ -9,7 +9,11 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
-import { MiddlewareService, CloudResultPayload } from './middleware.service';
+import {
+  MiddlewareService,
+  CloudResultPayload,
+  MiddlewareTelemetry,
+} from './middleware.service';
 import { Public } from '../auth/public.decorator';
 
 @ApiTags('Middleware Ingestion API')
@@ -76,7 +80,7 @@ export class MiddlewareController {
   async heartbeat(
     @Headers('x-site-code') siteCode: string,
     @Headers('x-api-key') apiKey?: string,
-    @Body() telemetry?: any,
+    @Body() telemetry?: MiddlewareTelemetry,
   ) {
     this.verifyAuth(apiKey);
     return this.middlewareService.recordHeartbeat(

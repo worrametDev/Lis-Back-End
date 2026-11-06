@@ -8,7 +8,21 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderCatalogService } from './order-catalog.service';
-import { OrderStatus, SpecimenStatus, ResultFlag } from '@prisma/client';
+import { CreateOrderDto, UpdateOrderDto } from './dto/order.dto';
+import { OrderStatus, Prisma } from '@prisma/client';
+
+type CacheWithKeys = Cache & {
+  store?: { keys?: (pattern: string) => Promise<string[]> };
+};
+
+interface OrderListItem extends Record<string, unknown> {
+  id: string;
+}
+
+export interface PaginatedOrderList {
+  data: OrderListItem[];
+  meta: { page: number; pageSize: number; total: number; totalPages: number };
+}
 
 @Injectable()
 export class OrdersService {
@@ -29,10 +43,10 @@ export class OrdersService {
     pageSize?: number;
   }) {
     const cacheKey = `orders_list_${JSON.stringify(query || {})}`;
-    const cached = await this.cacheManager.get<any[]>(cacheKey);
+    const cached = await this.cacheManager.get<PaginatedOrderList>(cacheKey);
     if (cached) return cached;
 
-    const where: any = {};
+    const where: Prisma.OrderWhereInput = {};
     if (query?.clientSiteId) where.clientSiteId = query.clientSiteId;
     if (query?.hn) where.hn = { contains: query.hn, mode: 'insensitive' };
     if (query?.status) where.status = query.status as OrderStatus;
@@ -166,7 +180,7 @@ export class OrdersService {
   async invalidateCache() {
     try {
       await this.cacheManager.del('orders_list_{}');
-      const store: any = (this.cacheManager as any).store;
+      const store = (this.cacheManager as CacheWithKeys).store;
       if (store && typeof store.keys === 'function') {
         const keys = await store.keys('orders_list_*');
         for (const k of keys) {
@@ -197,48 +211,7 @@ export class OrdersService {
     return order;
   }
 
-  async create(data: {
-    hn: string;
-    patientName: string;
-    idCard?: string;
-    passport?: string;
-    passportNo?: string;
-    clientSiteId?: string;
-    clientSiteName?: string;
-    clientSite?: string;
-    siteCode?: string;
-    siteName?: string;
-    parentSiteId?: string;
-    parentSiteCode?: string;
-    parentSiteName?: string;
-    wardId?: string;
-    ward?: string;
-    specimenType?: string;
-    testPanels?: string[];
-    selectedTests?: string[];
-    title?: string;
-    firstName?: string;
-    lastName?: string;
-    gender?: string;
-    dob?: string;
-    age?: string;
-    nationality?: string;
-    ethnicity?: string;
-    address?: string;
-    subdistrict?: string;
-    district?: string;
-    province?: string;
-    zipcode?: string;
-    telephone?: string;
-    patientType?: string;
-    entitlement?: string;
-    collectedDate?: string;
-    urgentStatus?: string;
-    testPanel?: string;
-    testProfile?: string;
-    testItem?: string;
-    orderItems?: any[];
-  }) {
+  async create(data: CreateOrderDto) {
     if (!data.hn || !data.patientName) {
       throw new BadRequestException('กรุณาระบุ HN และชื่อผู้ป่วย');
     }
@@ -319,7 +292,9 @@ export class OrdersService {
             testPanel: data.testPanel,
             testProfile: data.testProfile,
             testItem: data.testItem,
-            orderItems: rawOrderItems,
+            orderItems: JSON.parse(
+              JSON.stringify(rawOrderItems),
+            ) as Prisma.InputJsonValue,
             clientSiteId: clientSite.id,
             parentSiteId,
             wardId,
@@ -377,7 +352,7 @@ export class OrdersService {
     );
   }
 
-  async update(id: string, data: any) {
+  async update(id: string, data: UpdateOrderDto) {
     const existing = await this.prisma.order.findUnique({
       where: { id },
       include: {
@@ -422,7 +397,7 @@ export class OrdersService {
       'idCard',
       'orderItems',
     ];
-    const payload: any = {};
+    const payload: Prisma.OrderUncheckedUpdateInput = {};
     for (const field of fields)
       if (data[field] !== undefined) payload[field] = data[field];
     if (data.passportNo !== undefined || data.passport !== undefined)
@@ -468,7 +443,9 @@ export class OrdersService {
             entityType: 'Order',
             entityId: id,
             oldValues: existing.orderItems ?? [],
-            newValues: data.orderItems,
+            newValues: JSON.parse(
+              JSON.stringify(data.orderItems),
+            ) as Prisma.InputJsonValue,
           },
         });
       }
@@ -496,7 +473,7 @@ export class OrdersService {
     try {
       await this.cacheManager.del('dashboard_stats');
       await this.cacheManager.del('workstation_queue');
-      const store: any = (this.cacheManager as any).store;
+      const store = (this.cacheManager as CacheWithKeys).store;
       if (store && typeof store.keys === 'function') {
         const keys = await store.keys('samples_list_*');
         for (const key of keys) await this.cacheManager.del(key);

@@ -7,6 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtAuthService } from './jwt.service';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import type { Request } from 'express';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -45,7 +46,9 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 
-  private extractTokenFromRequest(request: any): string | null {
+  private extractTokenFromRequest(
+    request: Request & { cookies?: Record<string, string> },
+  ): string | null {
     // 1. From Authorization Bearer header
     const authHeader = request.headers.authorization;
     if (
