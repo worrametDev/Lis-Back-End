@@ -44,12 +44,24 @@ export class CreateConsultationDto {
   @IsOptional() @IsString() hn?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() outcome?: string;
+  @IsOptional() @IsString() referral?: string;
   @IsOptional() @IsString() referralSiteName?: string;
+  @IsOptional() @IsString() followUp?: string;
+  @IsOptional() @IsString() followUpDate?: string;
   @IsOptional() @IsObject() soap?: {
     s?: string;
     o?: string;
     a?: string;
     p?: string;
+    chiefComplaint?: string;
+    hpi?: string;
+    pe?: string;
+    assessment?: string;
+    planAdvice?: string;
+    followUp?: string;
+    followUpDate?: string;
+    referral?: string;
+    referralSiteName?: string;
   };
   @IsOptional() @IsObject() vitals?: Record<string, unknown>;
   @IsOptional() diagnosisCodes?: unknown[];

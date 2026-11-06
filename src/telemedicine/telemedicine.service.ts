@@ -372,9 +372,13 @@ export class TelemedicineService {
   }
 
   private formatConsultation(row: any) {
+    const rawDiag = (row.diagnosisCodes || {}) as Record<string, any>;
+    const details = (rawDiag.details || rawDiag) as Record<string, any>;
+
     return {
       id: row.id,
       consultationId: row.consultationNumber,
+      queueId: row.queueId,
       patientName: row.queue.patientName,
       hn: row.queue.hn,
       date: row.completedAt.toLocaleDateString('th-TH'),
@@ -384,12 +388,20 @@ export class TelemedicineService {
       roomName: row.queue.roomName || undefined,
       clientSite: row.queue.clientSite.siteName,
       parentSite: row.queue.parentSite.siteName,
-      referralSiteName: row.referralSiteName || undefined,
+      referral: details.referral || (row.referralSiteName ? 'ส่งต่อ' : 'ไม่ส่งต่อ'),
+      referralSiteName: row.referralSiteName || details.referralSiteName || undefined,
+      followUp: details.followUp || undefined,
+      followUpDate: details.followUpDate || undefined,
       soap: {
         s: row.subjective,
         o: row.objective,
         a: row.assessment,
         p: row.plan,
+        chiefComplaint: details.chiefComplaint || undefined,
+        hpi: details.hpi || undefined,
+        pe: details.pe || row.objective || undefined,
+        assessment: details.assessment || row.assessment || undefined,
+        planAdvice: details.planAdvice || row.plan || undefined,
       },
       vitals: row.vitalSigns,
     };
@@ -408,6 +420,35 @@ export class TelemedicineService {
           })
         : null;
     if (!queue) throw new NotFoundException('ไม่พบคิว Telemedicine');
+
+    const s =
+      dto.soap?.s ||
+      [dto.soap?.chiefComplaint, dto.soap?.hpi].filter(Boolean).join(': ') ||
+      '';
+    const o = dto.soap?.o || dto.soap?.pe || '';
+    const a = dto.soap?.a || dto.soap?.assessment || '';
+    const p = dto.soap?.p || dto.soap?.planAdvice || '';
+    const referral =
+      dto.referral ||
+      dto.soap?.referral ||
+      (dto.referralSiteName ? 'ส่งต่อ' : 'ไม่ส่งต่อ');
+    const referralSiteName =
+      dto.referralSiteName || dto.soap?.referralSiteName || null;
+    const followUp = dto.followUp || dto.soap?.followUp || null;
+    const followUpDate = dto.followUpDate || dto.soap?.followUpDate || null;
+
+    const clinicalDetails = {
+      chiefComplaint: dto.soap?.chiefComplaint || '',
+      hpi: dto.soap?.hpi || '',
+      pe: dto.soap?.pe || '',
+      assessment: dto.soap?.assessment || '',
+      planAdvice: dto.soap?.planAdvice || '',
+      followUp,
+      followUpDate,
+      referral,
+      referralSiteName,
+    };
+
     const result = await this.prisma.$transaction(async (tx) => {
       const count = await tx.telemedicineConsultation.count();
       const row = await tx.telemedicineConsultation.upsert({
@@ -416,26 +457,32 @@ export class TelemedicineService {
           consultationNumber: `CON-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`,
           queueId: queue.id,
           doctorId: userId,
-          subjective: dto.soap?.s || '',
-          objective: dto.soap?.o || '',
-          assessment: dto.soap?.a || '',
-          plan: dto.soap?.p || '',
+          subjective: s,
+          objective: o,
+          assessment: a,
+          plan: p,
           outcome: dto.outcome,
-          referralSiteName: dto.referralSiteName,
+          referralSiteName,
           vitalSigns: dto.vitals as Prisma.InputJsonValue,
-          diagnosisCodes: dto.diagnosisCodes as Prisma.InputJsonValue,
+          diagnosisCodes: {
+            details: clinicalDetails,
+            codes: dto.diagnosisCodes || [],
+          } as Prisma.InputJsonValue,
           prescriptions: dto.prescriptions as Prisma.InputJsonValue,
         },
         update: {
           doctorId: userId,
-          subjective: dto.soap?.s || '',
-          objective: dto.soap?.o || '',
-          assessment: dto.soap?.a || '',
-          plan: dto.soap?.p || '',
+          subjective: s,
+          objective: o,
+          assessment: a,
+          plan: p,
           outcome: dto.outcome,
-          referralSiteName: dto.referralSiteName,
+          referralSiteName,
           vitalSigns: dto.vitals as Prisma.InputJsonValue,
-          diagnosisCodes: dto.diagnosisCodes as Prisma.InputJsonValue,
+          diagnosisCodes: {
+            details: clinicalDetails,
+            codes: dto.diagnosisCodes || [],
+          } as Prisma.InputJsonValue,
           prescriptions: dto.prescriptions as Prisma.InputJsonValue,
           completedAt: new Date(),
         },
